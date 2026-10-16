@@ -1,0 +1,9 @@
+# Local-only data and build output — never uploaded to Vercel
+.data
+.next
+node_modules
+test-results
+playwright-report
+blob-report
+.env*
+!.env.example
