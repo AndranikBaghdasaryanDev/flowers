@@ -1,5 +1,6 @@
 import { Suspense } from "react";
-import Link from "next/link";
+import type { Metadata } from "next";
+import { Link } from "@/i18n/client";
 import { connection } from "next/server";
 import { Download, Truck, Store } from "lucide-react";
 import { requireStaffPage } from "@/lib/auth/guards";
@@ -11,25 +12,17 @@ import { DateRangeFilter, SearchBox, SelectFilter } from "@/components/admin/que
 import { Badge } from "@/components/ui/badge";
 import { Pagination } from "@/components/ui/pagination";
 import { statusTone } from "@/components/store/status-tone";
-import { formatMoney } from "@/lib/domain/money";
-import { orderStatusLabel, PAYMENT_STATUS_LABELS, PAYMENT_METHOD_LABELS, type PaymentStatus } from "@/lib/domain/orders";
-import { formatDateKey, formatDateTime } from "@/lib/domain/time";
+import type { OrderStatus, PaymentStatus } from "@/lib/domain/orders";
 import { buttonClasses } from "@/components/ui/button";
+import { getAdminI18n } from "@/i18n/server";
+import { paymentMethodLabel, paymentStatusLabel, statusLabel } from "@/i18n/labels";
 
-export const metadata = { title: "Orders" };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getAdminI18n();
+  return { title: t("admin.orders.title") };
+}
 
-const STATUS_TABS = [
-  { value: "", label: "All" },
-  { value: "pending", label: "Pending" },
-  { value: "confirmed", label: "Confirmed" },
-  { value: "preparing", label: "Preparing" },
-  { value: "ready", label: "Ready" },
-  { value: "out_for_delivery", label: "Out for delivery" },
-  { value: "delivery_failed", label: "Failed delivery" },
-  { value: "delivered", label: "Delivered" },
-  { value: "completed", label: "Completed" },
-  { value: "cancelled", label: "Cancelled" },
-];
+const STATUS_TABS: ("" | OrderStatus)[] = ["", "pending", "confirmed", "preparing", "ready", "out_for_delivery", "delivery_failed", "delivered", "completed", "cancelled"];
 
 function paymentTone(s: PaymentStatus) {
   return s === "paid" ? "success" : s === "refunded" ? "info" : s === "voided" ? "neutral" : "warning";
@@ -37,8 +30,9 @@ function paymentTone(s: PaymentStatus) {
 
 async function OrdersContent({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   await connection();
+  const { t, f } = await getAdminI18n();
   const { allowed } = await requireStaffPage("/admin/orders", "orders:read");
-  if (!allowed) return <NoAccess what="orders" />;
+  if (!allowed) return <NoAccess what={t("admin.nav.orders")} />;
   const raw = await searchParams;
   const flat: Record<string, string> = {};
   for (const [k, v] of Object.entries(raw)) if (typeof v === "string") flat[k] = v;
@@ -62,46 +56,71 @@ async function OrdersContent({ searchParams }: { searchParams: Promise<Record<st
   return (
     <>
       <AdminPageHeader
-        title="Orders"
-        description={`${result.total} ${result.total === 1 ? "order matches" : "orders match"} the current filters`}
+        title={t("admin.orders.title")}
+        description={t("admin.orders.matchCount", { count: result.total })}
         actions={
           <a href={exportHref} className={buttonClasses("outline", "sm")}>
-            <Download className="h-4 w-4" /> Export CSV
+            <Download className="h-4 w-4" /> {t("admin.orders.exportCsv")}
           </a>
         }
       />
       <div className="mb-4 -mx-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:flex-wrap sm:px-0">
-        {STATUS_TABS.map((t) => (
-          <FilterLink key={t.value} href={qs({ status: t.value || null })} active={status === t.value}>
-            {t.label}
+        {STATUS_TABS.map((s) => (
+          <FilterLink key={s} href={qs({ status: s || null })} active={status === s}>
+            {s ? statusLabel(t, s) : t("admin.common.all")}
           </FilterLink>
         ))}
       </div>
       <div className="mb-5 flex flex-col gap-3">
         <DateRangeFilter withDateField />
         <div className="flex flex-wrap items-center gap-2">
-          <SearchBox placeholder="Order №, name, phone, email" />
-          <SelectFilter param="payment" label="Payment" options={[{ value: "", label: "Any payment" }, { value: "unpaid", label: "Unpaid" }, { value: "paid", label: "Paid" }, { value: "refunded", label: "Refunded" }, { value: "voided", label: "Voided" }]} />
-          <SelectFilter param="fulfillment" label="Method" options={[{ value: "", label: "Delivery & pickup" }, { value: "delivery", label: "Delivery" }, { value: "pickup", label: "Pickup" }]} />
-          <SelectFilter param="sort" label="Sort" options={[{ value: "", label: "Newest first" }, { value: "oldest", label: "Oldest first" }, { value: "delivery_date", label: "By delivery date" }, { value: "total_desc", label: "Highest total" }, { value: "total_asc", label: "Lowest total" }]} />
+          <SearchBox placeholder={t("admin.orders.searchPlaceholder")} />
+          <SelectFilter
+            param="payment"
+            label={t("admin.orders.payment")}
+            options={[
+              { value: "", label: t("admin.orders.anyPayment") },
+              ...(["unpaid", "paid", "refunded", "voided"] as const).map((s) => ({ value: s, label: paymentStatusLabel(t, s) })),
+            ]}
+          />
+          <SelectFilter
+            param="fulfillment"
+            label={t("admin.orders.method")}
+            options={[
+              { value: "", label: t("admin.orders.deliveryAndPickup") },
+              { value: "delivery", label: t("admin.orders.delivery") },
+              { value: "pickup", label: t("admin.orders.pickup") },
+            ]}
+          />
+          <SelectFilter
+            param="sort"
+            label={t("admin.orders.sort")}
+            options={[
+              { value: "", label: t("admin.orders.sortNewest") },
+              { value: "oldest", label: t("admin.orders.sortOldest") },
+              { value: "delivery_date", label: t("admin.orders.sortDeliveryDate") },
+              { value: "total_desc", label: t("admin.orders.sortTotalDesc") },
+              { value: "total_asc", label: t("admin.orders.sortTotalAsc") },
+            ]}
+          />
         </div>
       </div>
 
       <Panel padded={false}>
         {result.items.length === 0 ? (
-          <p className="px-5 py-16 text-center text-sm text-ink-muted">No orders match these filters.</p>
+          <p className="px-5 py-16 text-center text-sm text-ink-muted">{t("admin.orders.empty")}</p>
         ) : (
           <>
             <Table>
               <thead>
                 <tr>
-                  <th className={th}>Order</th>
-                  <th className={th}>Customer</th>
-                  <th className={th}>Placed</th>
-                  <th className={th}>Fulfilment</th>
-                  <th className={th}>Status</th>
-                  <th className={th}>Payment</th>
-                  <th className={`${th} text-right`}>Total</th>
+                  <th className={th}>{t("admin.orders.order")}</th>
+                  <th className={th}>{t("admin.orders.customer")}</th>
+                  <th className={th}>{t("admin.orders.placed")}</th>
+                  <th className={th}>{t("admin.orders.fulfilment")}</th>
+                  <th className={th}>{t("admin.common.status")}</th>
+                  <th className={th}>{t("admin.orders.payment")}</th>
+                  <th className={`${th} text-right`}>{t("admin.orders.total")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -111,28 +130,28 @@ async function OrdersContent({ searchParams }: { searchParams: Promise<Record<st
                       <Link href={`/admin/orders/${o.id}`} className="font-semibold text-ink after:absolute group-hover:text-brand">
                         {o.orderNumber}
                       </Link>
-                      <p className="text-xs text-ink-muted">{o.itemCount} items</p>
+                      <p className="text-xs text-ink-muted">{t("admin.orders.itemCount", { count: o.itemCount })}</p>
                     </td>
                     <td className={td}>
                       <p className="font-medium text-ink">{o.customerName}</p>
                       <p className="text-xs text-ink-muted">{o.customerPhone}</p>
                     </td>
-                    <td className={`${td} whitespace-nowrap text-ink-soft`}>{formatDateTime(o.createdAt, tz, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</td>
+                    <td className={`${td} whitespace-nowrap text-ink-soft`}>{f.dateTime(o.createdAt, tz, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</td>
                     <td className={td}>
                       <p className="flex items-center gap-1.5 font-medium text-ink">
                         {o.fulfillmentType === "pickup" ? <Store className="h-3.5 w-3.5" /> : <Truck className="h-3.5 w-3.5" />}
-                        {formatDateKey(o.deliveryDate, { day: "numeric", month: "short" })} {o.timeWindowLabel && <span className="text-ink-muted">· {o.timeWindowLabel}</span>}
+                        {f.dateKey(o.deliveryDate, { day: "numeric", month: "short" })} {o.timeWindowLabel && <span className="text-ink-muted">· {o.timeWindowLabel}</span>}
                       </p>
-                      <p className="text-xs text-ink-muted">{[o.zone, o.courierName && `Courier: ${o.courierName}`].filter(Boolean).join(" · ") || o.methodName}</p>
+                      <p className="text-xs text-ink-muted">{[o.zone, o.courierName && t("admin.orders.courierName", { name: o.courierName })].filter(Boolean).join(" · ") || o.methodName}</p>
                     </td>
                     <td className={td}>
-                      <Badge tone={statusTone(o.status)}>{orderStatusLabel(o.status, o.fulfillmentType)}</Badge>
+                      <Badge tone={statusTone(o.status)}>{statusLabel(t, o.status, o.fulfillmentType)}</Badge>
                     </td>
                     <td className={td}>
-                      <Badge tone={paymentTone(o.paymentStatus)}>{PAYMENT_STATUS_LABELS[o.paymentStatus]}</Badge>
-                      <p className="mt-0.5 text-xs text-ink-muted">{PAYMENT_METHOD_LABELS[o.paymentMethod]}</p>
+                      <Badge tone={paymentTone(o.paymentStatus)}>{paymentStatusLabel(t, o.paymentStatus)}</Badge>
+                      <p className="mt-0.5 text-xs text-ink-muted">{paymentMethodLabel(t, o.paymentMethod)}</p>
                     </td>
-                    <td className={`${td} text-right font-semibold tabular`}>{formatMoney(o.total, o.currency)}</td>
+                    <td className={`${td} text-right font-semibold tabular`}>{f.money(o.total, o.currency)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -143,14 +162,14 @@ async function OrdersContent({ searchParams }: { searchParams: Promise<Record<st
                   <Link href={`/admin/orders/${o.id}`} className="block px-4 py-4 active:bg-cream">
                     <div className="flex items-center justify-between gap-2">
                       <span className="font-semibold text-ink">{o.orderNumber}</span>
-                      <span className="font-semibold tabular">{formatMoney(o.total, o.currency)}</span>
+                      <span className="font-semibold tabular">{f.money(o.total, o.currency)}</span>
                     </div>
                     <p className="mt-0.5 text-sm text-ink-soft">{o.customerName} · {o.customerPhone}</p>
                     <div className="mt-2 flex flex-wrap items-center gap-2">
-                      <Badge tone={statusTone(o.status)}>{orderStatusLabel(o.status, o.fulfillmentType)}</Badge>
-                      <Badge tone={paymentTone(o.paymentStatus)}>{PAYMENT_STATUS_LABELS[o.paymentStatus]}</Badge>
+                      <Badge tone={statusTone(o.status)}>{statusLabel(t, o.status, o.fulfillmentType)}</Badge>
+                      <Badge tone={paymentTone(o.paymentStatus)}>{paymentStatusLabel(t, o.paymentStatus)}</Badge>
                       <span className="text-xs text-ink-muted">
-                        {o.fulfillmentType === "pickup" ? "Pickup" : "Delivery"} {formatDateKey(o.deliveryDate, { day: "numeric", month: "short" })} {o.timeWindowLabel}
+                        {o.fulfillmentType === "pickup" ? t("admin.orders.pickup") : t("admin.orders.delivery")} {f.dateKey(o.deliveryDate, { day: "numeric", month: "short" })} {o.timeWindowLabel}
                       </span>
                     </div>
                   </Link>

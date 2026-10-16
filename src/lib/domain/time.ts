@@ -92,13 +92,13 @@ export function weekdayOfKey(dateKey: string): number {
   return new Date(Date.UTC(y, m - 1, d)).getUTCDay();
 }
 
-export function formatDateKey(dateKey: string, opts: Intl.DateTimeFormatOptions = { dateStyle: "medium" }): string {
+export function formatDateKey(dateKey: string, opts: Intl.DateTimeFormatOptions = { dateStyle: "medium" }, intlTag = "en-GB"): string {
   const [y, m, d] = dateKey.split("-").map(Number);
-  return new Intl.DateTimeFormat("en-GB", { ...opts, timeZone: "UTC" }).format(new Date(Date.UTC(y, m - 1, d)));
+  return new Intl.DateTimeFormat(intlTag, { ...opts, timeZone: "UTC" }).format(new Date(Date.UTC(y, m - 1, d)));
 }
 
-export function formatDateTime(date: Date | string, timeZone: string, opts?: Intl.DateTimeFormatOptions): string {
-  return new Intl.DateTimeFormat("en-GB", {
+export function formatDateTime(date: Date | string, timeZone: string, opts?: Intl.DateTimeFormatOptions, intlTag = "en-GB"): string {
+  return new Intl.DateTimeFormat(intlTag, {
     timeZone,
     ...(opts ?? { dateStyle: "medium", timeStyle: "short" }),
   }).format(new Date(date));

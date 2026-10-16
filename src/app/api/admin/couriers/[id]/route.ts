@@ -6,7 +6,7 @@ import { saveCourier } from "@/lib/services/admin";
 export const PUT = route<{ id: string }>(async (req, ctx) => {
   const user = await requirePermission("delivery:manage");
   const { id } = await ctx.params;
-  assertObjectId(id, "Courier");
+  assertObjectId(id, "courier");
   const input = await readJson(req, courierInputSchema);
   return ok({ id: await saveCourier(input, user, id) });
 });

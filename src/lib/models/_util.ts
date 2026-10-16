@@ -17,3 +17,28 @@ export function getModel<T>(name: string, schema: Schema): Model<T> {
 
 export const { ObjectId } = mongoose.Schema.Types;
 export type Id = mongoose.Types.ObjectId;
+
+/** Languages that can override a record's text; English is stored in the base fields. */
+export const CONTENT_LOCALES = ["hy", "ru"] as const;
+export type ContentLocale = (typeof CONTENT_LOCALES)[number];
+
+/** Per-language overrides of some text fields: `{ hy?: { name?: … }, ru?: { … } }`. */
+export type I18nOverrides<T> = Partial<Record<ContentLocale, Partial<T>>>;
+
+/**
+ * Schema path for `I18nOverrides`. `fields` maps each translatable field to its max length;
+ * array fields (lists such as composition) are declared as `[maxLength]`.
+ */
+export function i18nField(fields: Record<string, number | [number]>) {
+  const def: Record<string, unknown> = {};
+  for (const [name, max] of Object.entries(fields)) {
+    def[name] = Array.isArray(max)
+      ? { type: [{ type: String, trim: true, maxlength: max[0] }], default: undefined }
+      : { type: String, trim: true, maxlength: max };
+  }
+  const block = defineSchema(def, { _id: false });
+  return {
+    type: defineSchema({ hy: { type: block, default: undefined }, ru: { type: block, default: undefined } }, { _id: false }),
+    default: undefined,
+  };
+}

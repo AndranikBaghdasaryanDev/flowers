@@ -1,12 +1,13 @@
 import Image from "next/image";
-import Link from "next/link";
+import { Link } from "@/i18n/client";
 import { ArrowRight, Truck, Gift, Flower2 } from "lucide-react";
 import { LinkButton } from "@/components/ui/button";
 import { Price } from "@/components/ui/price";
 import type { StoreSettings } from "@/lib/services/settings";
 import type { ProductCardDTO } from "@/lib/types";
+import { getStoreI18n } from "@/i18n/server";
 
-export function Hero({
+export async function Hero({
   content,
   featured,
   deliveryCity,
@@ -15,6 +16,7 @@ export function Hero({
   featured: ProductCardDTO | null;
   deliveryCity: string | null;
 }) {
+  const { t } = await getStoreI18n();
   return (
     <section className="relative overflow-hidden">
       {/* soft botanical wash */}
@@ -30,20 +32,20 @@ export function Hero({
           <p className="mt-6 max-w-lg text-[17px] leading-relaxed text-ink-soft">{content.heroSubtitle}</p>
           <div className="mt-9 flex flex-col gap-3 sm:flex-row">
             <LinkButton href="/shop" size="lg" icon={<Flower2 className="h-[18px] w-[18px]" />}>
-              Shop flowers
+              {t("home.heroCta")}
             </LinkButton>
             <LinkButton href="/categories#occasions" size="lg" variant="outline">
-              Choose by occasion
+              {t("home.heroSecondary")}
             </LinkButton>
           </div>
           <ul className="mt-10 flex flex-wrap gap-x-7 gap-y-3 text-[13.5px] text-ink-soft">
             {deliveryCity && (
               <li className="flex items-center gap-2">
-                <Truck className="h-4 w-4 text-brand" /> Delivery across {deliveryCity}
+                <Truck className="h-4 w-4 text-brand" /> {t("home.deliveryAcross", { city: deliveryCity })}
               </li>
             )}
             <li className="flex items-center gap-2">
-              <Gift className="h-4 w-4 text-brand" /> Personal gift message
+              <Gift className="h-4 w-4 text-brand" /> {t("home.giftMessage")}
             </li>
           </ul>
         </div>
@@ -76,7 +78,7 @@ export function Hero({
                 {featured.image && <Image src={featured.image.src} alt="" fill sizes="64px" className="object-cover" />}
               </span>
               <span className="min-w-0">
-                <span className="block text-[10.5px] font-bold uppercase tracking-[0.18em] text-brand">Featured</span>
+                <span className="block text-[10.5px] font-bold uppercase tracking-[0.18em] text-brand">{t("home.featuredBadge")}</span>
                 <span className="block truncate font-display text-lg leading-tight text-ink">{featured.name}</span>
                 <Price amount={featured.price} compareAt={featured.compareAtPrice} currency={featured.currency} size="sm" />
               </span>

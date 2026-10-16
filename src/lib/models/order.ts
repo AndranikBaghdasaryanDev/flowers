@@ -11,6 +11,7 @@ import {
   type VehicleType,
 } from "@/lib/domain/orders";
 import { CURRENCY_CODES } from "@/lib/domain/money";
+import { DEFAULT_LOCALE, LOCALES, type Locale } from "@/i18n/config";
 import { defineSchema, getModel, ObjectId, type Id } from "./_util";
 
 /** Immutable snapshot of a purchased product, captured at order time. */
@@ -63,6 +64,8 @@ const orderSchema = defineSchema(
     /** SHA-256 hashes of guest tracking tokens (a retried checkout issues an extra token). */
     accessTokenHashes: { type: [String], default: [], select: false },
     user: { type: ObjectId, ref: "User", default: null, index: true },
+    /** Language the order was placed in; customer emails use it. */
+    locale: { type: String, enum: LOCALES, default: DEFAULT_LOCALE },
     customer: {
       name: { type: String, required: true, maxlength: 120 },
       email: { type: String, required: true, lowercase: true, maxlength: 254 },
@@ -175,6 +178,7 @@ export interface OrderDoc {
   idempotencyKey?: string;
   accessTokenHashes: string[];
   user: Id | null;
+  locale?: Locale;
   customer: { name: string; email: string; phone: string };
   recipient: { name: string; phone: string };
   fulfillment: { kind: FulfillmentType; method: Id; methodName: string; requiresCourier: boolean };

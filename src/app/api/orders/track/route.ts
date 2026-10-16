@@ -13,7 +13,7 @@ export const GET = route(async (req) => {
   const ip = await clientIp();
   await enforceRateLimit(`track:${ip}`, 60, 10 * 60);
   const order = await getOrderByToken(orderNumber, token);
-  if (!order) throw ApiError.notFound("We could not find this order.");
+  if (!order) throw ApiError.notFound("server.errors.orderLookupFailed");
   return ok(order);
 });
 
@@ -23,6 +23,6 @@ export const POST = route(async (req) => {
   await enforceRateLimit(`track-lookup:${ip}`, 10, 10 * 60);
   const input = await readJson(req, trackLookupSchema.extend({ website: z.string().max(0).optional() }));
   const order = await getOrderByLookup(input.orderNumber, input.email);
-  if (!order) throw ApiError.notFound("We could not find an order with these details. Check the order number and email.");
+  if (!order) throw ApiError.notFound("server.errors.orderLookupDetails");
   return ok(order);
 });

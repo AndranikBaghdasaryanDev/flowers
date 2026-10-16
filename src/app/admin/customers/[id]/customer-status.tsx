@@ -7,11 +7,13 @@ import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/modal";
 import { useToast } from "@/components/ui/toast";
 import { api, errorMessage } from "@/lib/client/api";
+import { useT } from "@/i18n/client";
 
 type Status = "active" | "disabled";
 
 /** Enable / disable a customer account (requires settings:manage on the server). */
 export function CustomerStatus({ id, name, status }: { id: string; name: string; status: Status }) {
+  const t = useT();
   const router = useRouter();
   const toast = useToast();
   const [open, setOpen] = useState(false);
@@ -22,11 +24,11 @@ export function CustomerStatus({ id, name, status }: { id: string; name: string;
     setBusy(true);
     try {
       await api<{ status: Status }>(`/api/admin/customers/${id}`, { method: "PATCH", body: { status: next } });
-      toast.success(next === "disabled" ? "Account disabled" : "Account enabled");
+      toast.success(next === "disabled" ? t("admin.customers.disabledToast") : t("admin.customers.enabledToast"));
       setOpen(false);
       router.refresh();
     } catch (e) {
-      toast.error("Account not updated", errorMessage(e));
+      toast.error(t("admin.customers.notUpdated"), errorMessage(e));
     } finally {
       setBusy(false);
     }
@@ -41,7 +43,7 @@ export function CustomerStatus({ id, name, status }: { id: string; name: string;
         icon={next === "disabled" ? <UserX className="h-4 w-4" /> : <UserCheck className="h-4 w-4" />}
         onClick={() => setOpen(true)}
       >
-        {next === "disabled" ? "Disable account" : "Enable account"}
+        {next === "disabled" ? t("admin.customers.disable") : t("admin.customers.enable")}
       </Button>
       <ConfirmDialog
         open={open}
@@ -49,18 +51,12 @@ export function CustomerStatus({ id, name, status }: { id: string; name: string;
         onConfirm={submit}
         loading={busy}
         tone={next === "disabled" ? "danger" : "primary"}
-        title={next === "disabled" ? "Disable this account?" : "Enable this account?"}
-        confirmLabel={next === "disabled" ? "Disable account" : "Enable account"}
+        title={next === "disabled" ? t("admin.customers.disableTitle") : t("admin.customers.enableTitle")}
+        confirmLabel={next === "disabled" ? t("admin.customers.disable") : t("admin.customers.enable")}
         description={
-          next === "disabled" ? (
-            <>
-              <strong className="text-ink">{name}</strong> will be signed out everywhere and will not be able to sign in. Their orders and details are kept, and you can enable the account again at any time.
-            </>
-          ) : (
-            <>
-              <strong className="text-ink">{name}</strong> will be able to sign in and place orders again.
-            </>
-          )
+          next === "disabled"
+            ? t.rich("admin.customers.disableText", { b: (c) => <strong className="text-ink">{c}</strong> }, { name })
+            : t.rich("admin.customers.enableText", { b: (c) => <strong className="text-ink">{c}</strong> }, { name })
         }
       />
     </>

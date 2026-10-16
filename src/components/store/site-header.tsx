@@ -1,6 +1,8 @@
 "use client";
 
-import Link from "next/link";
+import { Link, useT } from "@/i18n/client";
+import { stripLocale } from "@/i18n/config";
+import { LanguageList, LanguageSwitcher } from "@/components/store/language-switcher";
 import Image from "next/image";
 import { RouteChangeListener, WithPathname } from "@/components/route-change";
 import { useEffect, useRef, useState } from "react";
@@ -19,6 +21,7 @@ export type NavData = { collections: NavCategory[]; occasions: NavCategory[]; an
 export const EMPTY_NAV: NavData = { collections: [], occasions: [], announcement: "" };
 
 export function SiteHeader({ nav }: { nav: NavData }) {
+  const t = useT();
   const { count, openDrawer, ready } = useCart();
   const { user } = useSession();
   const [scrolled, setScrolled] = useState(false);
@@ -48,18 +51,18 @@ export function SiteHeader({ nav }: { nav: NavData }) {
         <div className="container-page grid h-[72px] grid-cols-[1fr_auto_1fr] items-center gap-2 lg:h-20">
           {/* Left: mobile menu / desktop nav */}
           <div className="flex items-center gap-1">
-            <button type="button" className={cn(iconBtn, "inline-flex lg:hidden")} aria-label="Open menu" onClick={() => setMenuOpen(true)}>
+            <button type="button" className={cn(iconBtn, "inline-flex lg:hidden")} aria-label={t("nav.openMenu")} onClick={() => setMenuOpen(true)}>
               <Menu className="h-[22px] w-[22px]" />
             </button>
-            <button type="button" className={cn(iconBtn, "inline-flex lg:hidden")} aria-label="Search" onClick={() => setSearchOpen(true)}>
+            <button type="button" className={cn(iconBtn, "inline-flex lg:hidden")} aria-label={t("nav.search")} onClick={() => setSearchOpen(true)}>
               <Search className="h-5 w-5" />
             </button>
-            <nav aria-label="Main" className="hidden items-center gap-1 lg:flex">
-              <NavLink href="/shop">Shop</NavLink>
-              <MegaMenu label="Collections" items={nav.collections} allHref="/categories" allLabel="All collections" withImages />
-              <MegaMenu label="Occasions" items={nav.occasions} allHref="/categories#occasions" allLabel="All occasions" />
-              <NavLink href="/about">About</NavLink>
-              <NavLink href="/contact">Contact</NavLink>
+            <nav aria-label={t("nav.main")} className="hidden items-center gap-1 lg:flex">
+              <NavLink href="/shop">{t("nav.shop")}</NavLink>
+              <MegaMenu label={t("nav.collections")} items={nav.collections} allHref="/categories" allLabel={t("nav.allCollections")} withImages />
+              <MegaMenu label={t("nav.occasions")} items={nav.occasions} allHref="/categories#occasions" allLabel={t("nav.allOccasions")} />
+              <NavLink href="/about">{t("nav.about")}</NavLink>
+              <NavLink href="/contact">{t("nav.contact")}</NavLink>
             </nav>
           </div>
 
@@ -68,22 +71,25 @@ export function SiteHeader({ nav }: { nav: NavData }) {
 
           {/* Right: actions */}
           <div className="flex items-center justify-end gap-0.5">
-            <button type="button" className={cn(iconBtn, "hidden lg:inline-flex")} aria-label="Search" onClick={() => setSearchOpen(true)}>
+            <span className="hidden sm:inline-flex">
+              <LanguageSwitcher />
+            </span>
+            <button type="button" className={cn(iconBtn, "hidden lg:inline-flex")} aria-label={t("nav.search")} onClick={() => setSearchOpen(true)}>
               <Search className="h-5 w-5" />
             </button>
             {user?.isStaff && (
-              <Link href="/admin" className={cn(iconBtn, "hidden sm:inline-flex")} aria-label="Admin dashboard" title="Admin dashboard">
+              <Link href="/admin" className={cn(iconBtn, "hidden sm:inline-flex")} aria-label={t("nav.adminDashboard")} title={t("nav.adminDashboard")}>
                 <LayoutDashboard className="h-5 w-5" />
               </Link>
             )}
-            <Link href="/account/favorites" className={cn(iconBtn, "hidden sm:inline-flex")} aria-label="Favourites" title="Favourites">
+            <Link href="/account/favorites" className={cn(iconBtn, "hidden sm:inline-flex")} aria-label={t("nav.favorites")} title={t("nav.favorites")}>
               <Heart className="h-5 w-5" />
             </Link>
-            <Link href={user ? "/account" : "/login"} className={cn(iconBtn, "inline-flex")} aria-label={user ? "My account" : "Sign in"} title={user ? "My account" : "Sign in"}>
+            <Link href={user ? "/account" : "/login"} className={cn(iconBtn, "inline-flex")} aria-label={user ? t("nav.myAccount") : t("nav.signIn")} title={user ? t("nav.myAccount") : t("nav.signIn")}>
               <User className="h-5 w-5" />
               {user && <span className="absolute right-2.5 top-2.5 h-2 w-2 rounded-full bg-sage ring-2 ring-ivory" aria-hidden="true" />}
             </Link>
-            <button type="button" className={cn(iconBtn, "inline-flex")} onClick={openDrawer} aria-label={`Shopping bag, ${count} ${count === 1 ? "item" : "items"}`}>
+            <button type="button" className={cn(iconBtn, "inline-flex")} onClick={openDrawer} aria-label={t("nav.bag", { count })}>
               <ShoppingBag className="h-5 w-5" />
               {ready && count > 0 && (
                 <span
@@ -115,7 +121,7 @@ function NavLink({ href, children }: { href: string; children: React.ReactNode }
   return (
     <WithPathname fallback={<NavLinkInner href={href}>{children}</NavLinkInner>}>
       {(pathname) => (
-        <NavLinkInner href={href} active={pathname === href}>
+        <NavLinkInner href={href} active={stripLocale(pathname) === href}>
           {children}
         </NavLinkInner>
       )}
@@ -152,6 +158,7 @@ function MegaMenu({
   allLabel: string;
   withImages?: boolean;
 }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const closeTimer = useRef<number | undefined>(undefined);
@@ -203,7 +210,7 @@ function MegaMenu({
       >
         <div className={cn("flex gap-6 rounded-3xl border border-line bg-paper p-6 shadow-lift", withImages ? "w-[620px]" : "w-[300px]")}>
           <ul className="min-w-[180px] flex-1 space-y-0.5">
-            {items.length === 0 && <li className="px-3 py-2 text-sm text-ink-muted">Loading…</li>}
+            {items.length === 0 && <li className="px-3 py-2 text-sm text-ink-muted">{t("common.loading")}</li>}
             {items.map((item) => (
               <li key={item.slug}>
                 <Link
@@ -244,21 +251,22 @@ function MegaMenu({
 }
 
 function MobileMenu({ open, onClose, nav, signedIn, isStaff }: { open: boolean; onClose: () => void; nav: NavData; signedIn: boolean; isStaff: boolean }) {
+  const t = useT();
   const [section, setSection] = useState<"collections" | "occasions" | null>("collections");
   const link = "flex items-center justify-between rounded-xl px-3 py-3 text-[17px] text-ink transition-colors hover:bg-cream";
   return (
-    <Modal open={open} onClose={onClose} title="Menu" side="left">
-      <nav aria-label="Mobile" className="-mx-2 space-y-1">
+    <Modal open={open} onClose={onClose} title={t("nav.menu")} side="left">
+      <nav aria-label={t("nav.mobile")} className="-mx-2 space-y-1">
         <Link href="/" className={link}>
-          Home
+          {t("nav.home")}
         </Link>
         <Link href="/shop" className={link}>
-          Shop all flowers
+          {t("nav.shopAll")}
         </Link>
         {(["collections", "occasions"] as const).map((key) => (
           <div key={key}>
             <button type="button" className={cn(link, "w-full")} aria-expanded={section === key} onClick={() => setSection(section === key ? null : key)}>
-              <span>{key === "collections" ? "Collections" : "Occasions"}</span>
+              <span>{key === "collections" ? t("nav.collections") : t("nav.occasions")}</span>
               <ChevronDown className={cn("h-4 w-4 transition-transform", section === key && "rotate-180")} />
             </button>
             <div className={cn("grid transition-[grid-template-rows] duration-300", section === key ? "grid-rows-[1fr]" : "grid-rows-[0fr]")}>
@@ -275,29 +283,33 @@ function MobileMenu({ open, onClose, nav, signedIn, isStaff }: { open: boolean; 
           </div>
         ))}
         <Link href="/about" className={link}>
-          About Floriani
+          {t("nav.aboutBrand")}
         </Link>
         <Link href="/delivery" className={link}>
-          Delivery
+          {t("nav.delivery")}
         </Link>
         <Link href="/contact" className={link}>
-          Contact
+          {t("nav.contact")}
         </Link>
         <Link href="/orders/track" className={link}>
-          Track an order
+          {t("nav.trackOrder")}
         </Link>
         <div className="my-3 border-t border-line" />
         <Link href={signedIn ? "/account" : "/login"} className={link}>
-          {signedIn ? "My account" : "Sign in / Register"}
+          {signedIn ? t("nav.myAccount") : t("nav.signInRegister")}
         </Link>
         <Link href="/account/favorites" className={link}>
-          Favourites
+          {t("nav.favorites")}
         </Link>
         {isStaff && (
           <Link href="/admin" className={link}>
-            Admin dashboard
+            {t("nav.adminDashboard")}
           </Link>
         )}
+        <div className="mt-6 border-t border-line px-2 pt-5">
+          <p className="mb-3 text-[11px] font-bold uppercase tracking-[0.2em] text-ink-muted">{t("nav.languageHeading")}</p>
+          <LanguageList />
+        </div>
       </nav>
     </Modal>
   );

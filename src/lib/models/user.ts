@@ -1,4 +1,5 @@
 import { ROLES, type Role } from "@/lib/domain/roles";
+import { DEFAULT_LOCALE, LOCALES, type Locale } from "@/i18n/config";
 import { defineSchema, getModel, ObjectId, type Id } from "./_util";
 
 const addressSchema = defineSchema(
@@ -45,6 +46,8 @@ const userSchema = defineSchema(
     },
     lastLoginAt: { type: Date, default: null },
     marketingOptIn: { type: Boolean, default: false },
+    /** Preferred language for emails (set at registration and sign-in). */
+    locale: { type: String, enum: LOCALES, default: DEFAULT_LOCALE },
   },
   { timestamps: true },
 );
@@ -81,6 +84,7 @@ export interface UserDoc {
   cart: { items: { product: Id; quantity: number }[]; giftMessage: string; updatedAt: Date | null };
   lastLoginAt: Date | null;
   marketingOptIn: boolean;
+  locale?: Locale;
   createdAt: Date;
   updatedAt: Date;
 }

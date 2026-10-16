@@ -10,47 +10,31 @@ import { Field, FormError, Input, Select } from "@/components/ui/form";
 import { Modal } from "@/components/ui/modal";
 import { useToast } from "@/components/ui/toast";
 import { api, errorMessage, fieldErrors } from "@/lib/client/api";
-import { PERMISSIONS, ROLE_LABELS, ROLE_PERMISSIONS, STAFF_ROLES, type Permission, type Role, type StaffRole } from "@/lib/domain/roles";
+import { PERMISSIONS, ROLE_PERMISSIONS, STAFF_ROLES, type Permission, type Role, type StaffRole } from "@/lib/domain/roles";
+import { useFormat, useT } from "@/i18n/client";
 
 type StaffMember = { id: string; name: string; email: string; role: StaffRole; status: string; lastLoginAt: string | null };
+type T = ReturnType<typeof useT>;
 
-const PERMISSION_LABELS: Record<Permission, string> = {
-  "dashboard:read": "See the overview dashboard",
-  "orders:read": "View orders",
-  "orders:update": "Update order status",
-  "orders:cancel": "Cancel orders",
-  "payments:manage": "Record payments and refunds",
-  "delivery:manage": "Manage delivery and couriers",
-  "products:manage": "Manage products",
-  "categories:manage": "Manage categories",
-  "customers:read": "View customers",
-  "analytics:read": "View analytics",
-  "content:manage": "Edit site content and gallery",
-  "reviews:manage": "Moderate reviews",
-  "settings:manage": "Change store settings and customer accounts",
-  "staff:manage": "Manage staff and roles",
-  "audit:read": "Read the activity log",
-};
-
-const ROLE_SUMMARY: Record<StaffRole, string> = {
-  owner: "Full access, including adding staff and changing roles.",
-  admin: "Runs the whole store except staff management.",
-  order_manager: "Handles orders, payments, delivery, catalogue and reviews.",
-  delivery_manager: "Sees orders and manages couriers and deliveries.",
-};
+// Dictionary keys: admin.common.roles.<role>, admin.staff.roleSummary.<role>, admin.staff.permission.<area>_<action>.
+const roleLabel = (t: T, r: StaffRole | "customer") => t(`admin.common.roles.${r}`);
+const roleSummary = (t: T, r: StaffRole) => t(`admin.staff.roleSummary.${r}`);
+const permissionLabel = (t: T, p: Permission) => t.dynamic(`admin.staff.permission.${p.replace(":", "_")}`, undefined, p);
 
 const roleTone = (r: StaffRole): BadgeTone => (r === "owner" ? "dark" : r === "admin" ? "brand" : "sage");
 
 export function StaffManager({ initial, currentUserId, currentRole, timeZone }: { initial: StaffMember[]; currentUserId: string; currentRole: Role; timeZone: string }) {
   const router = useRouter();
   const toast = useToast();
+  const t = useT();
+  const f = useFormat();
   const [staff, setStaff] = useState(initial);
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<StaffMember | null>(null);
   const [issued, setIssued] = useState<{ email: string; password: string } | null>(null);
   const assignable = STAFF_ROLES.filter((r) => r !== "owner" || currentRole === "owner");
   const fmt = (iso: string | null) =>
-    iso ? new Intl.DateTimeFormat("en-GB", { timeZone, day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date(iso)) : "Never";
+    iso ? f.dateTime(iso, timeZone, { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) : t("admin.staff.never");
 
   const reload = async () => {
     try {
@@ -61,31 +45,31 @@ export function StaffManager({ initial, currentUserId, currentRole, timeZone }: 
     router.refresh();
   };
 
-  const statusBadge = (s: string) => <Badge tone={s === "active" ? "success" : "danger"}>{s === "active" ? "Active" : "Disabled"}</Badge>;
+  const statusBadge = (s: string) => <Badge tone={s === "active" ? "success" : "danger"}>{s === "active" ? t("admin.staff.active") : t("admin.staff.disabled")}</Badge>;
 
   return (
     <div className="space-y-6">
       {issued && <TemporaryPassword email={issued.email} password={issued.password} onDismiss={() => setIssued(null)} />}
 
       <Panel
-        title="Team"
-        description={`${staff.length} ${staff.length === 1 ? "person has" : "people have"} admin access`}
+        title={t("admin.staff.team")}
+        description={t("admin.staff.teamCount", { count: staff.length })}
         padded={false}
         actions={
           <Button size="sm" icon={<UserPlus className="h-4 w-4" />} onClick={() => setAdding(true)}>
-            Add staff
+            {t("admin.staff.add")}
           </Button>
         }
       >
         <Table>
           <thead>
             <tr>
-              <th className={th}>Name</th>
-              <th className={th}>Role</th>
-              <th className={th}>Status</th>
-              <th className={th}>Last sign-in</th>
+              <th className={th}>{t("admin.common.name")}</th>
+              <th className={th}>{t("admin.staff.roleLabel")}</th>
+              <th className={th}>{t("admin.common.status")}</th>
+              <th className={th}>{t("admin.staff.lastSignIn")}</th>
               <th className={`${th} text-right`}>
-                <span className="sr-only">Actions</span>
+                <span className="sr-only">{t("admin.common.actions")}</span>
               </th>
             </tr>
           </thead>
@@ -96,19 +80,19 @@ export function StaffManager({ initial, currentUserId, currentRole, timeZone }: 
                 <tr key={s.id}>
                   <td className={td}>
                     <p className="font-semibold text-ink">
-                      {s.name} {self && <span className="ml-1 text-xs font-medium text-ink-muted">(you)</span>}
+                      {s.name} {self && <span className="ml-1 text-xs font-medium text-ink-muted">{t("admin.staff.you")}</span>}
                     </p>
                     <p className="text-xs text-ink-muted">{s.email}</p>
                   </td>
                   <td className={td}>
-                    <Badge tone={roleTone(s.role)}>{ROLE_LABELS[s.role]}</Badge>
+                    <Badge tone={roleTone(s.role)}>{roleLabel(t, s.role)}</Badge>
                   </td>
                   <td className={td}>{statusBadge(s.status)}</td>
                   <td className={`${td} whitespace-nowrap text-ink-soft`}>{fmt(s.lastLoginAt)}</td>
                   <td className={`${td} text-right`}>
                     {!self && (
-                      <Button size="sm" variant="ghost" icon={<Pencil className="h-3.5 w-3.5" />} onClick={() => setEditing(s)} aria-label={`Edit access for ${s.name}`}>
-                        Edit
+                      <Button size="sm" variant="ghost" icon={<Pencil className="h-3.5 w-3.5" />} onClick={() => setEditing(s)} aria-label={t("admin.staff.editAccessFor", { name: s.name })}>
+                        {t("admin.common.edit")}
                       </Button>
                     )}
                   </td>
@@ -124,18 +108,18 @@ export function StaffManager({ initial, currentUserId, currentRole, timeZone }: 
               <li key={s.id} className="flex items-start justify-between gap-3 px-4 py-4">
                 <div className="min-w-0">
                   <p className="truncate font-semibold text-ink">
-                    {s.name} {self && <span className="text-xs font-medium text-ink-muted">(you)</span>}
+                    {s.name} {self && <span className="text-xs font-medium text-ink-muted">{t("admin.staff.you")}</span>}
                   </p>
                   <p className="truncate text-sm text-ink-soft">{s.email}</p>
                   <div className="mt-2 flex flex-wrap items-center gap-2">
-                    <Badge tone={roleTone(s.role)}>{ROLE_LABELS[s.role]}</Badge>
+                    <Badge tone={roleTone(s.role)}>{roleLabel(t, s.role)}</Badge>
                     {statusBadge(s.status)}
                   </div>
-                  <p className="mt-1.5 text-xs text-ink-muted">Last sign-in: {fmt(s.lastLoginAt)}</p>
+                  <p className="mt-1.5 text-xs text-ink-muted">{t("admin.staff.lastSignInAt", { date: fmt(s.lastLoginAt) })}</p>
                 </div>
                 {!self && (
-                  <Button size="sm" variant="outline" onClick={() => setEditing(s)} aria-label={`Edit access for ${s.name}`}>
-                    Edit
+                  <Button size="sm" variant="outline" onClick={() => setEditing(s)} aria-label={t("admin.staff.editAccessFor", { name: s.name })}>
+                    {t("admin.common.edit")}
                   </Button>
                 )}
               </li>
@@ -144,7 +128,7 @@ export function StaffManager({ initial, currentUserId, currentRole, timeZone }: 
         </MobileCards>
       </Panel>
 
-      <Panel title="What each role can do" description="Changes to a person’s role sign them out so the new access applies straight away.">
+      <Panel title={t("admin.staff.rolesTitle")} description={t("admin.staff.rolesHint")}>
         <div className="grid gap-4 sm:grid-cols-2">
           {STAFF_ROLES.map((r) => {
             const granted = new Set<Permission>(ROLE_PERMISSIONS[r]);
@@ -152,14 +136,14 @@ export function StaffManager({ initial, currentUserId, currentRole, timeZone }: 
               <div key={r} className="rounded-xl border border-line p-4">
                 <div className="flex items-center gap-2">
                   <ShieldCheck className="h-4 w-4 text-brand" aria-hidden="true" />
-                  <h3 className="font-sans text-[14.5px] font-semibold tracking-normal text-ink">{ROLE_LABELS[r]}</h3>
+                  <h3 className="font-sans text-[14.5px] font-semibold tracking-normal text-ink">{roleLabel(t, r)}</h3>
                 </div>
-                <p className="mt-1 text-[13px] text-ink-muted">{ROLE_SUMMARY[r]}</p>
-                <ul className="mt-3 space-y-1.5" aria-label={`${ROLE_LABELS[r]} permissions`}>
+                <p className="mt-1 text-[13px] text-ink-muted">{roleSummary(t, r)}</p>
+                <ul className="mt-3 space-y-1.5" aria-label={t("admin.staff.permissionsOf", { role: roleLabel(t, r) })}>
                   {PERMISSIONS.filter((p) => granted.has(p)).map((p) => (
                     <li key={p} className="flex items-start gap-2 text-[13px] text-ink-soft">
                       <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-success" aria-hidden="true" />
-                      {PERMISSION_LABELS[p]}
+                      {permissionLabel(t, p)}
                     </li>
                   ))}
                 </ul>
@@ -176,7 +160,7 @@ export function StaffManager({ initial, currentUserId, currentRole, timeZone }: 
           onAdded={(email, password) => {
             setAdding(false);
             if (password) setIssued({ email, password });
-            toast.success("Staff member added", password ? "Share the temporary password with them securely." : undefined);
+            toast.success(t("admin.staff.added"), password ? t("admin.staff.addedHint") : undefined);
             void reload();
           }}
         />
@@ -189,7 +173,7 @@ export function StaffManager({ initial, currentUserId, currentRole, timeZone }: 
           onSaved={(list) => {
             setEditing(null);
             setStaff(list);
-            toast.success("Access updated", "They have been signed out so the change applies straight away.");
+            toast.success(t("admin.staff.accessUpdated"), t("admin.staff.accessUpdatedHint"));
             router.refresh();
           }}
         />
@@ -199,6 +183,7 @@ export function StaffManager({ initial, currentUserId, currentRole, timeZone }: 
 }
 
 function TemporaryPassword({ email, password, onDismiss }: { email: string; password: string; onDismiss: () => void }) {
+  const t = useT();
   const [copied, setCopied] = useState(false);
   const copy = async () => {
     try {
@@ -213,17 +198,15 @@ function TemporaryPassword({ email, password, onDismiss }: { email: string; pass
       <div className="flex items-start gap-3">
         <KeyRound className="mt-0.5 h-5 w-5 shrink-0 text-warning" aria-hidden="true" />
         <div className="min-w-0 flex-1">
-          <p className="font-semibold text-ink">Temporary password for {email}</p>
-          <p className="mt-1 text-sm text-ink-soft">
-            This is shown only once. Share it with them securely (not in a group chat or public channel) and ask them to change it after their first sign-in.
-          </p>
+          <p className="font-semibold text-ink">{t("admin.staff.tempPasswordFor", { email })}</p>
+          <p className="mt-1 text-sm text-ink-soft">{t("admin.staff.tempPasswordHint")}</p>
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <code className="break-all rounded-lg border border-line bg-paper px-3 py-2 font-mono text-[15px] font-semibold text-ink">{password}</code>
             <Button size="sm" variant="outline" icon={copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />} onClick={copy}>
-              {copied ? "Copied" : "Copy"}
+              {copied ? t("admin.staff.copied") : t("admin.staff.copy")}
             </Button>
             <Button size="sm" variant="ghost" onClick={onDismiss}>
-              I’ve shared it
+              {t("admin.staff.shared")}
             </Button>
           </div>
         </div>
@@ -233,6 +216,7 @@ function TemporaryPassword({ email, password, onDismiss }: { email: string; pass
 }
 
 function AddStaffModal({ roles, onClose, onAdded }: { roles: StaffRole[]; onClose: () => void; onAdded: (email: string, temporaryPassword: string | null) => void }) {
+  const t = useT();
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [role, setRole] = useState<StaffRole>(roles.includes("order_manager") ? "order_manager" : roles[0]);
@@ -263,42 +247,42 @@ function AddStaffModal({ roles, onClose, onAdded }: { roles: StaffRole[]; onClos
     <Modal
       open
       onClose={onClose}
-      title="Add staff member"
-      description="If the email already belongs to a customer account, that account is given staff access."
+      title={t("admin.staff.addTitle")}
+      description={t("admin.staff.addHint")}
       footer={
         <div className="flex justify-end gap-2">
           <Button variant="ghost" onClick={onClose}>
-            Cancel
+            {t("common.cancel")}
           </Button>
           <Button type="submit" form="add-staff-form" loading={busy}>
-            Add staff member
+            {t("admin.staff.addTitle")}
           </Button>
         </div>
       }
     >
       <form id="add-staff-form" onSubmit={submit} className="space-y-4" noValidate>
         <FormError message={error} />
-        <Field id="st-email" label="Email" required error={fields.email}>
+        <Field id="st-email" label={t("form.email")} required error={fields.email}>
           <Input id="st-email" type="email" autoComplete="off" value={email} onChange={(e) => setEmail(e.target.value)} invalid={!!fields.email} required />
         </Field>
-        <Field id="st-name" label="Full name" required error={fields.name}>
+        <Field id="st-name" label={t("form.fullName")} required error={fields.name}>
           <Input id="st-name" autoComplete="off" value={name} onChange={(e) => setName(e.target.value)} invalid={!!fields.name} required />
         </Field>
-        <Field id="st-role" label="Role" required error={fields.role} hint={ROLE_SUMMARY[role]}>
+        <Field id="st-role" label={t("admin.staff.roleLabel")} required error={fields.role} hint={roleSummary(t, role)}>
           <Select id="st-role" value={role} onChange={(e) => setRole(e.target.value as StaffRole)} invalid={!!fields.role}>
             {roles.map((r) => (
               <option key={r} value={r}>
-                {ROLE_LABELS[r]}
+                {roleLabel(t, r)}
               </option>
             ))}
           </Select>
         </Field>
         <Field
           id="st-password"
-          label="Password"
+          label={t("admin.staff.password")}
           optional
           error={fields.password}
-          hint="Leave empty to generate a temporary password, shown once after saving. At least 8 characters with a letter and a number."
+          hint={t("admin.staff.passwordHint")}
         >
           <Input id="st-password" type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} invalid={!!fields.password} />
         </Field>
@@ -309,6 +293,7 @@ function AddStaffModal({ roles, onClose, onAdded }: { roles: StaffRole[]; onClos
 
 function EditStaffModal({ member, roles, onClose, onSaved }: { member: StaffMember; roles: StaffRole[]; onClose: () => void; onSaved: (list: StaffMember[]) => void }) {
   const toast = useToast();
+  const t = useT();
   const [role, setRole] = useState<StaffRole | "customer">(member.role);
   const [status, setStatus] = useState<"active" | "disabled">(member.status === "disabled" ? "disabled" : "active");
   const [busy, setBusy] = useState(false);
@@ -323,7 +308,7 @@ function EditStaffModal({ member, roles, onClose, onSaved }: { member: StaffMemb
       onSaved(await api<StaffMember[]>(`/api/admin/staff/${member.id}`, { method: "PATCH", body: { role, status } }));
     } catch (e) {
       setError(errorMessage(e));
-      toast.error("Access not changed", errorMessage(e));
+      toast.error(t("admin.staff.accessNotChanged"), errorMessage(e));
     } finally {
       setBusy(false);
     }
@@ -333,38 +318,38 @@ function EditStaffModal({ member, roles, onClose, onSaved }: { member: StaffMemb
     <Modal
       open
       onClose={onClose}
-      title={`Edit access for ${member.name}`}
+      title={t("admin.staff.editAccessFor", { name: member.name })}
       description={member.email}
       footer={
         <div className="flex justify-end gap-2">
           <Button variant="ghost" onClick={onClose}>
-            Cancel
+            {t("common.cancel")}
           </Button>
           <Button variant={role === "customer" || status === "disabled" ? "danger" : "primary"} onClick={submit} loading={busy} disabled={!changed}>
-            Save changes
+            {t("admin.common.saveChanges")}
           </Button>
         </div>
       }
     >
       <div className="space-y-4">
         <FormError message={error} />
-        <Field id="ed-role" label="Role" hint={role === "customer" ? "They keep their customer account and orders but lose all admin access." : ROLE_SUMMARY[role]}>
+        <Field id="ed-role" label={t("admin.staff.roleLabel")} hint={role === "customer" ? t("admin.staff.removeAccessHint") : roleSummary(t, role)}>
           <Select id="ed-role" value={role} onChange={(e) => setRole(e.target.value as StaffRole | "customer")}>
             {options.map((r) => (
               <option key={r} value={r}>
-                {ROLE_LABELS[r]}
+                {roleLabel(t, r)}
               </option>
             ))}
-            <option value="customer">Remove staff access</option>
+            <option value="customer">{t("admin.staff.removeAccess")}</option>
           </Select>
         </Field>
-        <Field id="ed-status" label="Account status" hint={status === "disabled" ? "They will be signed out and cannot sign in until enabled again." : undefined}>
+        <Field id="ed-status" label={t("admin.staff.accountStatus")} hint={status === "disabled" ? t("admin.staff.disabledHint") : undefined}>
           <Select id="ed-status" value={status} onChange={(e) => setStatus(e.target.value === "disabled" ? "disabled" : "active")}>
-            <option value="active">Active</option>
-            <option value="disabled">Disabled</option>
+            <option value="active">{t("admin.staff.active")}</option>
+            <option value="disabled">{t("admin.staff.disabled")}</option>
           </Select>
         </Field>
-        <p className="text-[13px] text-ink-muted">Saving signs this person out of all devices so the new access applies immediately.</p>
+        <p className="text-[13px] text-ink-muted">{t("admin.staff.signOutNote")}</p>
       </div>
     </Modal>
   );

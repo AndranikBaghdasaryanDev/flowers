@@ -1,5 +1,5 @@
 import Image from "next/image";
-import Link from "next/link";
+import { Link } from "@/i18n/client";
 import { brand } from "@/lib/brand";
 import { cn } from "@/lib/cn";
 

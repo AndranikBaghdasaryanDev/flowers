@@ -7,6 +7,7 @@ import { Pagination } from "@/components/ui/pagination";
 import { listPublicCategories, listShopProducts, type ShopQuery, type ShopSort } from "@/lib/services/catalog";
 import { getSettings } from "@/lib/services/settings";
 import { CURRENCIES, toMajor } from "@/lib/domain/money";
+import { getStoreI18n } from "@/i18n/server";
 
 const SORT_VALUES: ShopSort[] = ["relevance", "newest", "price_asc", "price_desc", "popular"];
 
@@ -46,9 +47,10 @@ export async function ShopView({
   lockedCategory?: string;
   lockedKind?: "collection" | "occasion";
 }) {
+  const { locale, t } = await getStoreI18n();
   const query = parseShopParams(searchParams);
   if (lockedCategory) query.category = lockedCategory;
-  const [result, categories, settings] = await Promise.all([listShopProducts(query), listPublicCategories(), getSettings()]);
+  const [result, categories, settings] = await Promise.all([listShopProducts(query, locale), listPublicCategories(undefined, locale), getSettings(locale)]);
   const toOption = (kind: "collection" | "occasion"): FilterOption[] =>
     categories.filter((c) => c.kind === kind && c.productCount > 0).map((c) => ({ slug: c.slug, name: c.name, count: c.productCount }));
 
@@ -69,7 +71,7 @@ export async function ShopView({
 
   return (
     <div className="grid gap-10 lg:grid-cols-[240px_1fr] lg:gap-12">
-      <aside className="hidden lg:block" aria-label="Filters">
+      <aside className="hidden lg:block" aria-label={t("shop.filters")}>
         <div className="sticky top-28">
           <ShopSidebar {...controls} />
         </div>
@@ -80,11 +82,11 @@ export async function ShopView({
           <EmptyState
             className="mt-8"
             icon={<Search className="h-6 w-6" />}
-            title={query.q ? `Nothing found for “${query.q}”` : "No flowers match these filters"}
-            description="Try removing a filter, widening the price range, or browsing all flowers."
+            title={query.q ? t("shop.nothingFound", { query: query.q }) : t("shop.noMatches")}
+            description={t("shop.noMatchesHint")}
             action={
               <LinkButton href={lockedCategory ? basePath : "/shop"} variant="outline">
-                Clear filters
+                {t("shop.clearFilters")}
               </LinkButton>
             }
           />

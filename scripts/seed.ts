@@ -7,7 +7,8 @@
  * Every sample record is flagged `isSample: true`. The storefront labels sample products,
  * and the admin setup checklist asks the owner to replace them. Sample prices and fees are
  * placeholders, NOT official Floriani prices. Photos are from Unsplash (see scripts/seed-assets/CREDITS.json).
- * The script is idempotent: existing records (matched by slug/name) are left untouched.
+ * The script is idempotent: existing records (matched by slug/name) are left untouched, except that
+ * Armenian / Russian translations (scripts/seed-i18n.ts) are added to seeded records that have none yet.
  */
 import "./load-env";
 import mongoose from "mongoose";
@@ -18,6 +19,22 @@ import { Category, Media, Product } from "@/lib/models/catalog";
 import { DeliveryMethod } from "@/lib/models/delivery";
 import { GalleryItem, Settings } from "@/lib/models/content";
 import { storeImage } from "@/lib/services/media";
+import {
+  CARE_I18N,
+  CATEGORIES_I18N,
+  CONTENT_ALT_I18N,
+  DELIVERY_METHODS_I18N,
+  GALLERY_I18N,
+  LEGAL_I18N,
+  LEGAL_TEMPLATE_NOTICE_I18N,
+  PLANT_CARE_I18N,
+  PRODUCTS_I18N,
+  TERMS_I18N,
+  YEREVAN_DISTRICTS_I18N,
+  translateTerms,
+} from "./seed-i18n";
+
+const LANGS = ["hy", "ru"] as const;
 
 const DEMO = process.argv.includes("--demo");
 const ASSETS = path.resolve(process.cwd(), "scripts/seed-assets");
@@ -44,7 +61,22 @@ async function image(file: string, alt: string, purpose: "product" | "category" 
 const LEGAL_TEMPLATE_NOTICE =
   "This page is a starting template prepared for Floriani Flowers. It must be reviewed and adapted by the business before launch.";
 
+const LEGAL_EN = {
+  privacy: `${LEGAL_TEMPLATE_NOTICE}\n\nWhat we collect\nWhen you place an order we collect your name, phone number, email address and, for deliveries, the delivery address and recipient details. If you create an account we also store your saved addresses and order history.\n\nWhy we collect it\nWe use this information only to prepare, deliver and support your order, to contact you about it, and — if you opt in — to send occasional news.\n\nSharing\nDelivery details are shared only with the courier carrying your order. We do not sell personal data.\n\nYour rights\nYou can ask us to access, correct or delete your personal data by contacting us.`,
+  terms: `${LEGAL_TEMPLATE_NOTICE}\n\nOrders\nAn order is accepted once we confirm it. We may contact you if an item or delivery slot becomes unavailable.\n\nNatural products\nFlowers are natural products. Individual stems may vary slightly in colour, size and shape from the photographs; if a particular flower is unavailable we may replace it with one of similar style and equal or greater value.\n\nPayment\nPayment is collected on delivery or at pickup, as selected at checkout.\n\nDelivery\nPlease make sure the recipient is available at the chosen address and time window.`,
+  returns: `${LEGAL_TEMPLATE_NOTICE}\n\nCancellation\nYou can cancel your order online while it is still awaiting confirmation. After confirmation, please contact us as soon as possible.\n\nQuality concerns\nIf your flowers arrive damaged or not as described, please contact us within 24 hours of delivery with a photo so we can make it right.`,
+};
+type LegalPage = keyof typeof LEGAL_EN;
+const LEGAL_PAGES = Object.keys(LEGAL_EN) as LegalPage[];
+
+const legalTranslation = (page: LegalPage, lang: "hy" | "ru") => `${LEGAL_TEMPLATE_NOTICE_I18N[lang]}\n\n${LEGAL_I18N[page][lang]}`;
+
 async function seedSettings() {
+  const legal: Record<string, string> = {};
+  for (const page of LEGAL_PAGES) {
+    legal[`legal.${page}`] = LEGAL_EN[page];
+    for (const lang of LANGS) legal[`i18n.${lang}.${page}`] = legalTranslation(page, lang);
+  }
   await Settings.updateOne(
     { _id: "store" },
     {
@@ -54,19 +86,43 @@ async function seedSettings() {
         currency: "AMD",
         timeZone: "Asia/Yerevan",
         "social.instagram": "https://www.instagram.com/floriani.flowers/",
-        "legal.privacy": `${LEGAL_TEMPLATE_NOTICE}\n\nWhat we collect\nWhen you place an order we collect your name, phone number, email address and, for deliveries, the delivery address and recipient details. If you create an account we also store your saved addresses and order history.\n\nWhy we collect it\nWe use this information only to prepare, deliver and support your order, to contact you about it, and — if you opt in — to send occasional news.\n\nSharing\nDelivery details are shared only with the courier carrying your order. We do not sell personal data.\n\nYour rights\nYou can ask us to access, correct or delete your personal data by contacting us.`,
-        "legal.terms": `${LEGAL_TEMPLATE_NOTICE}\n\nOrders\nAn order is accepted once we confirm it. We may contact you if an item or delivery slot becomes unavailable.\n\nNatural products\nFlowers are natural products. Individual stems may vary slightly in colour, size and shape from the photographs; if a particular flower is unavailable we may replace it with one of similar style and equal or greater value.\n\nPayment\nPayment is collected on delivery or at pickup, as selected at checkout.\n\nDelivery\nPlease make sure the recipient is available at the chosen address and time window.`,
-        "legal.returns": `${LEGAL_TEMPLATE_NOTICE}\n\nCancellation\nYou can cancel your order online while it is still awaiting confirmation. After confirmation, please contact us as soon as possible.\n\nQuality concerns\nIf your flowers arrive damaged or not as described, please contact us within 24 hours of delivery with a photo so we can make it right.`,
+        ...legal,
       },
     },
     { upsert: true },
   );
+  // Existing stores: translate legal templates the owner has not edited yet.
+  for (const page of LEGAL_PAGES) {
+    for (const lang of LANGS) {
+      await Settings.updateOne(
+        { _id: "store", [`legal.${page}`]: LEGAL_EN[page], [`i18n.${lang}.${page}`]: { $exists: false } },
+        { $set: { [`i18n.${lang}.${page}`]: legalTranslation(page, lang) } },
+      );
+    }
+  }
   console.log("✓ store settings");
+}
+
+/** Translations for a seeded delivery method (zone names only when the zones are the seeded districts). */
+function deliveryMethodI18n(name: string, zones: string[]) {
+  const tr = DELIVERY_METHODS_I18N[name];
+  if (!tr) return undefined;
+  const seededZones = zones.length === YEREVAN_DISTRICTS.length && zones.every((z, i) => z === YEREVAN_DISTRICTS[i]);
+  return Object.fromEntries(
+    LANGS.map((lang) => [lang, { ...tr[lang], ...(seededZones ? { zones: YEREVAN_DISTRICTS_I18N[lang] } : {}) }]),
+  );
 }
 
 async function seedDeliveryMethods() {
   if (await DeliveryMethod.exists({})) {
-    console.log("• delivery methods already exist — skipped");
+    let translated = 0;
+    for (const m of await DeliveryMethod.find({ i18n: { $exists: false } }).select("name zones").lean()) {
+      const i18n = deliveryMethodI18n(m.name, (m.zones ?? []).map((z) => z.name));
+      if (!i18n) continue;
+      await DeliveryMethod.updateOne({ _id: m._id, i18n: { $exists: false } }, { $set: { i18n } });
+      translated++;
+    }
+    console.log(`• delivery methods already exist — skipped (${translated} translated)`);
     return;
   }
   await DeliveryMethod.create([
@@ -90,6 +146,7 @@ async function seedDeliveryMethods() {
       ],
       requiresCourier: true,
       sortOrder: 0,
+      i18n: deliveryMethodI18n("Courier delivery in Yerevan", YEREVAN_DISTRICTS),
     },
     {
       name: "Pickup from the studio",
@@ -108,6 +165,7 @@ async function seedDeliveryMethods() {
       requiresCourier: false,
       pickupAddress: "",
       sortOrder: 1,
+      i18n: deliveryMethodI18n("Pickup from the studio", []),
     },
   ]);
   console.log("✓ delivery methods (sample fees — review before launch)");
@@ -149,6 +207,32 @@ type SeedProduct = {
 };
 
 const CARE = "Trim the stems at an angle and place them in fresh, cool water. Change the water every two days and keep the flowers away from direct sun, heat and ripening fruit.";
+const PLANT_CARE = "Keep in bright, indirect light. Water when the top of the soil feels dry; never leave the roots standing in water.";
+
+function categoryI18n(slug: string) {
+  const tr = CATEGORIES_I18N[slug];
+  return tr ? { hy: tr.hy, ru: tr.ru } : undefined;
+}
+
+function productI18n(p: SeedProduct) {
+  const tr = PRODUCTS_I18N[p.slug];
+  if (!tr) return undefined;
+  const plant = p.category === "indoor-plants";
+  const block = (lang: "hy" | "ru") => ({
+    name: tr[lang].name,
+    shortDescription: tr[lang].short,
+    description: tr[lang].description,
+    imageAlts: tr[lang].imageAlts,
+    composition: translateTerms(p.composition, lang),
+    colors: translateTerms(p.colors, lang),
+    sizeLabel: p.sizeLabel ? (TERMS_I18N[p.sizeLabel]?.[lang] ?? "") : "",
+    dimensions: p.dimensions ? (TERMS_I18N[p.dimensions]?.[lang] ?? "") : "",
+    careInstructions: (plant ? PLANT_CARE_I18N : CARE_I18N)[lang],
+  });
+  return { hy: block("hy"), ru: block("ru") };
+}
+
+const galleryI18n = (alt: string) => (GALLERY_I18N[alt] ? { hy: { alt: GALLERY_I18N[alt].hy }, ru: { alt: GALLERY_I18N[alt].ru } } : undefined);
 
 const PRODUCTS: SeedProduct[] = [
   { slug: "velvet-burgundy-roses", name: "Velvet Burgundy Roses", category: "roses", occasions: ["love-romance", "anniversary"], price: 32000, images: [["velvet-roses-1.webp", "A generous bunch of deep red roses on white"], ["velvet-roses-2.webp", "Close-up of a velvety red rose"]], short: "Deep, velvety roses gathered into a statement bouquet.", description: "A classic declaration in the richest shade of red. Long-stemmed roses are gathered by hand and finished with a refined wrap that lets the colour speak for itself.", composition: ["Red roses"], colors: ["Burgundy", "Red"], sizeLabel: "Medium", dimensions: "Approx. 45 cm tall", featured: true },
@@ -178,6 +262,7 @@ async function seedDemoCatalogue() {
     const existing = await Category.findOne({ slug: c.slug }).lean();
     if (existing) {
       catIds.set(c.slug, existing._id as mongoose.Types.ObjectId);
+      await Category.updateOne({ _id: existing._id, isSample: true, i18n: { $exists: false } }, { $set: { i18n: categoryI18n(c.slug) } });
       continue;
     }
     const img = await image(c.image, c.alt, "category");
@@ -191,6 +276,7 @@ async function seedDemoCatalogue() {
       sortOrder: order++,
       isActive: true,
       isFeatured: Boolean(c.featured),
+      i18n: categoryI18n(c.slug),
       isSample: true,
     });
     catIds.set(c.slug, doc._id as mongoose.Types.ObjectId);
@@ -199,7 +285,10 @@ async function seedDemoCatalogue() {
 
   let created = 0;
   for (const p of PRODUCTS) {
-    if (await Product.exists({ slug: p.slug })) continue;
+    if (await Product.exists({ slug: p.slug })) {
+      await Product.updateOne({ slug: p.slug, isSample: true, i18n: { $exists: false } }, { $set: { i18n: productI18n(p) } });
+      continue;
+    }
     const images = [];
     for (const [file, alt] of p.images) images.push({ media: await image(file, alt, "product"), alt });
     await Product.create({
@@ -216,20 +305,20 @@ async function seedDemoCatalogue() {
       colors: p.colors,
       sizeLabel: p.sizeLabel ?? "",
       dimensions: p.dimensions ?? "",
-      careInstructions: p.category === "indoor-plants" ? "Keep in bright, indirect light. Water when the top of the soil feels dry; never leave the roots standing in water." : CARE,
+      careInstructions: p.category === "indoor-plants" ? PLANT_CARE : CARE,
       availability: "available",
       trackInventory: Boolean(p.trackInventory),
       stockQuantity: p.trackInventory ? (p.stock ?? 0) : null,
       isActive: true,
       isFeatured: Boolean(p.featured),
+      i18n: productI18n(p),
       isSample: true,
     });
     created++;
   }
   console.log(`✓ sample products (${created} new)`);
 
-  if (!(await GalleryItem.exists({}))) {
-    const gallery: [string, string][] = [
+  const gallery: [string, string][] = [
       ["gallery-1.webp", "Pink peonies with eucalyptus"],
       ["gallery-2.webp", "A florist composing a spring bouquet"],
       ["gallery-3.webp", "Peonies wrapped in kraft paper"],
@@ -238,12 +327,17 @@ async function seedDemoCatalogue() {
       ["gallery-6.webp", "A loose arrangement in a dark jug"],
       ["gallery-7.webp", "A sculptural arrangement on a mantelpiece"],
       ["gallery-8.webp", "Close-up of soft pink garden roses"],
-    ];
+  ];
+  if (!(await GalleryItem.exists({}))) {
     let i = 0;
     for (const [file, alt] of gallery) {
-      await GalleryItem.create({ image: await image(file, alt, "gallery"), alt, sortOrder: i++, isActive: true, isSample: true });
+      await GalleryItem.create({ image: await image(file, alt, "gallery"), alt, i18n: galleryI18n(alt), sortOrder: i++, isActive: true, isSample: true });
     }
     console.log("✓ gallery (sample images)");
+  } else {
+    for (const [, alt] of gallery) {
+      await GalleryItem.updateMany({ alt, isSample: true, i18n: { $exists: false } }, { $set: { i18n: galleryI18n(alt) } });
+    }
   }
 
   const settings = await Settings.findById("store").lean();
@@ -262,6 +356,18 @@ async function seedDemoCatalogue() {
       },
     );
     console.log("✓ homepage imagery (sample)");
+  }
+  // Translate the sample image descriptions while they are unchanged.
+  for (const [field, english] of [
+    ["heroImageAlt", "A lush hand-tied bouquet of roses, astrantia and berries"],
+    ["storyImageAlt", "A florist arranging roses and hydrangea"],
+  ] as const) {
+    for (const lang of LANGS) {
+      await Settings.updateOne(
+        { _id: "store", [`content.${field}`]: english, [`i18n.${lang}.${field}`]: { $exists: false } },
+        { $set: { [`i18n.${lang}.${field}`]: CONTENT_ALT_I18N[field][lang] } },
+      );
+    }
   }
 }
 

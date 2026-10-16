@@ -2,6 +2,7 @@
 
 import { Minus, Plus } from "lucide-react";
 import { cn } from "@/lib/cn";
+import { useT } from "@/i18n/client";
 
 export function QuantityStepper({
   value,
@@ -9,7 +10,7 @@ export function QuantityStepper({
   min = 1,
   max = 99,
   size = "md",
-  label = "Quantity",
+  label,
   disabled,
 }: {
   value: number;
@@ -20,6 +21,8 @@ export function QuantityStepper({
   label?: string;
   disabled?: boolean;
 }) {
+  const t = useT();
+  const groupLabel = label ?? t("cart.quantity");
   const btn = cn(
     "inline-flex items-center justify-center rounded-full text-ink transition-colors hover:bg-cream hover:text-brand disabled:pointer-events-none disabled:opacity-35",
     size === "sm" ? "h-9 w-9" : "h-11 w-11",
@@ -27,10 +30,10 @@ export function QuantityStepper({
   return (
     <div
       role="group"
-      aria-label={label}
+      aria-label={groupLabel}
       className={cn("inline-flex items-center rounded-full border border-line bg-paper", size === "sm" ? "h-10 px-0.5" : "h-12 px-0.5")}
     >
-      <button type="button" className={btn} onClick={() => onChange(Math.max(min, value - 1))} disabled={disabled || value <= min} aria-label="Decrease quantity">
+      <button type="button" className={btn} onClick={() => onChange(Math.max(min, value - 1))} disabled={disabled || value <= min} aria-label={t("cart.decrease")}>
         <Minus className="h-4 w-4" />
       </button>
       <input
@@ -40,7 +43,7 @@ export function QuantityStepper({
         max={max}
         value={value}
         disabled={disabled}
-        aria-label={label}
+        aria-label={groupLabel}
         onChange={(e) => {
           const n = Number(e.target.value);
           if (Number.isFinite(n)) onChange(Math.max(min, Math.min(max, Math.floor(n))));
@@ -51,7 +54,7 @@ export function QuantityStepper({
         )}
         style={{ MozAppearance: "textfield" }}
       />
-      <button type="button" className={btn} onClick={() => onChange(Math.min(max, value + 1))} disabled={disabled || value >= max} aria-label="Increase quantity">
+      <button type="button" className={btn} onClick={() => onChange(Math.min(max, value + 1))} disabled={disabled || value >= max} aria-label={t("cart.increase")}>
         <Plus className="h-4 w-4" />
       </button>
     </div>

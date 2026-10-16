@@ -7,7 +7,7 @@ import { resendVerification, verifyEmail } from "@/lib/services/auth";
 export const POST = route(async (req) => {
   const { token } = await readJson(req, z.object({ token: z.string().min(20).max(128) }));
   const verified = await verifyEmail(token);
-  if (!verified) throw ApiError.validation("This confirmation link is invalid or has expired.");
+  if (!verified) throw ApiError.validation("server.errors.confirmLinkInvalid");
   return ok({ verified: true });
 });
 

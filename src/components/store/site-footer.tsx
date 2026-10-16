@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { Link } from "@/i18n/client";
 import { connection } from "next/server";
 import { Phone, Mail, MapPin, Clock } from "lucide-react";
 import { FacebookIcon, InstagramIcon, TelegramIcon } from "@/components/ui/social-icons";
@@ -7,10 +7,13 @@ import { NewsletterForm } from "@/components/store/newsletter-form";
 import { getSettings } from "@/lib/services/settings";
 import { listPublicCategories } from "@/lib/services/catalog";
 import { brand } from "@/lib/brand";
+import { getStoreI18n } from "@/i18n/server";
+import { LanguageSwitcher } from "@/components/store/language-switcher";
 
 export async function SiteFooter() {
   await connection();
-  const [settings, collections] = await Promise.all([getSettings(), listPublicCategories("collection").catch(() => [])]);
+  const { locale, t } = await getStoreI18n();
+  const [settings, collections] = await Promise.all([getSettings(locale), listPublicCategories("collection", locale).catch(() => [])]);
   const { contact, social } = settings;
   const year = new Date().getFullYear();
   const hasContact = Boolean(contact.phone || contact.email || contact.address || contact.hours);
@@ -24,27 +27,30 @@ export async function SiteFooter() {
           <div className="space-y-6">
             <Logo tone="light" size="md" />
             <p className="max-w-xs text-[14.5px] leading-relaxed text-ivory/70">
-              Bouquets, compositions and indoor plants composed by hand{settings.tagline ? ` — ${settings.tagline}` : "."}
+              {t("footer.tagline")}
+              {settings.tagline ? ` — ${settings.tagline}` : ""}
             </p>
             <div>
-              <p className="mb-3 text-sm font-semibold text-ivory">Seasonal news and new compositions</p>
+              <p className="mb-3 text-sm font-semibold text-ivory">{t("footer.newsletterTitle")}</p>
               <NewsletterForm tone="dark" />
               <p className="mt-2 text-xs text-ivory/50">
-                We only use your email for Floriani news. See our{" "}
-                <Link href="/legal/privacy" className="underline underline-offset-2 hover:text-ivory">
-                  privacy policy
-                </Link>
-                .
+                {t.rich("footer.newsletterNote", {
+                  link: (chunk) => (
+                    <Link href="/legal/privacy" className="underline underline-offset-2 hover:text-ivory">
+                      {chunk}
+                    </Link>
+                  ),
+                })}
               </p>
             </div>
           </div>
 
           <nav aria-label="Shop">
-            <h2 className={heading}>Shop</h2>
+            <h2 className={heading}>{t("footer.shop")}</h2>
             <ul className="space-y-2.5">
               <li>
                 <Link href="/shop" className={link}>
-                  All flowers
+                  {t("footer.allFlowers")}
                 </Link>
               </li>
               {collections.slice(0, 6).map((c) => (
@@ -58,18 +64,18 @@ export async function SiteFooter() {
           </nav>
 
           <nav aria-label="Help">
-            <h2 className={heading}>Help</h2>
+            <h2 className={heading}>{t("footer.help")}</h2>
             <ul className="space-y-2.5">
-              <li><Link href="/delivery" className={link}>Delivery information</Link></li>
-              <li><Link href="/orders/track" className={link}>Track an order</Link></li>
-              <li><Link href="/account" className={link}>My account</Link></li>
-              <li><Link href="/contact" className={link}>Contact</Link></li>
-              <li><Link href="/about" className={link}>About Floriani</Link></li>
+              <li><Link href="/delivery" className={link}>{t("footer.deliveryInfo")}</Link></li>
+              <li><Link href="/orders/track" className={link}>{t("nav.trackOrder")}</Link></li>
+              <li><Link href="/account" className={link}>{t("nav.myAccount")}</Link></li>
+              <li><Link href="/contact" className={link}>{t("nav.contact")}</Link></li>
+              <li><Link href="/about" className={link}>{t("nav.aboutBrand")}</Link></li>
             </ul>
           </nav>
 
           <div>
-            <h2 className={heading}>Get in touch</h2>
+            <h2 className={heading}>{t("footer.getInTouch")}</h2>
             {hasContact ? (
               <ul className="space-y-3 text-[14.5px] text-ivory/80">
                 {contact.phone && (
@@ -99,26 +105,28 @@ export async function SiteFooter() {
               </ul>
             ) : (
               <p className="text-[14.5px] leading-relaxed text-ivory/70">
-                Message us on Instagram or use the{" "}
-                <Link href="/contact" className="underline underline-offset-2 hover:text-ivory">
-                  contact page
-                </Link>
-                .
+                {t.rich("footer.noContact", {
+                  link: (chunk) => (
+                    <Link href="/contact" className="underline underline-offset-2 hover:text-ivory">
+                      {chunk}
+                    </Link>
+                  ),
+                })}
               </p>
             )}
             <div className="mt-6 flex gap-2">
               {social.instagram && (
-                <a href={social.instagram} target="_blank" rel="noopener noreferrer" className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-ivory/20 text-ivory/80 transition-colors hover:border-ivory hover:text-ivory" aria-label={`Instagram @${brand.instagramHandle} (opens in a new tab)`}>
+                <a href={social.instagram} target="_blank" rel="noopener noreferrer" className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-ivory/20 text-ivory/80 transition-colors hover:border-ivory hover:text-ivory" aria-label={t("footer.socialLink", { network: `Instagram @${brand.instagramHandle}` })}>
                   <InstagramIcon className="h-4 w-4" />
                 </a>
               )}
               {social.facebook && (
-                <a href={social.facebook} target="_blank" rel="noopener noreferrer" className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-ivory/20 text-ivory/80 transition-colors hover:border-ivory hover:text-ivory" aria-label="Facebook (opens in a new tab)">
+                <a href={social.facebook} target="_blank" rel="noopener noreferrer" className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-ivory/20 text-ivory/80 transition-colors hover:border-ivory hover:text-ivory" aria-label={t("footer.socialLink", { network: "Facebook" })}>
                   <FacebookIcon className="h-4 w-4" />
                 </a>
               )}
               {social.telegram && (
-                <a href={social.telegram} target="_blank" rel="noopener noreferrer" className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-ivory/20 text-ivory/80 transition-colors hover:border-ivory hover:text-ivory" aria-label="Telegram (opens in a new tab)">
+                <a href={social.telegram} target="_blank" rel="noopener noreferrer" className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-ivory/20 text-ivory/80 transition-colors hover:border-ivory hover:text-ivory" aria-label={t("footer.socialLink", { network: "Telegram" })}>
                   <TelegramIcon className="h-4 w-4" />
                 </a>
               )}
@@ -128,12 +136,15 @@ export async function SiteFooter() {
       </div>
       <div className="border-t border-ivory/10">
         <div className="container-page flex flex-col gap-3 py-6 text-[13px] text-ivory/55 sm:flex-row sm:items-center sm:justify-between">
-          <p>© {year} {settings.storeName}. All rights reserved.</p>
-          <nav aria-label="Legal" className="flex flex-wrap gap-x-5 gap-y-2">
-            <Link href="/legal/privacy" className="hover:text-ivory">Privacy policy</Link>
-            <Link href="/legal/terms" className="hover:text-ivory">Terms & conditions</Link>
-            <Link href="/legal/returns" className="hover:text-ivory">Cancellations & returns</Link>
+          <p>{t("footer.copyright", { year: String(year), name: settings.storeName })}</p>
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+          <nav aria-label={t("footer.legal")} className="flex flex-wrap gap-x-5 gap-y-2">
+            <Link href="/legal/privacy" className="hover:text-ivory">{t("legal.privacy")}</Link>
+            <Link href="/legal/terms" className="hover:text-ivory">{t("legal.terms")}</Link>
+            <Link href="/legal/returns" className="hover:text-ivory">{t("legal.returns")}</Link>
           </nav>
+          <LanguageSwitcher tone="dark" />
+          </div>
         </div>
       </div>
     </footer>

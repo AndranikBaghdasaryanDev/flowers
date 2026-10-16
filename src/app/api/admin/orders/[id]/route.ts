@@ -6,6 +6,6 @@ export const GET = route<{ id: string }>(async (_req, ctx) => {
   await requirePermission("orders:read");
   const { id } = await ctx.params;
   const order = await getStaffOrder(id);
-  if (!order) throw ApiError.notFound("Order not found.");
+  if (!order) throw ApiError.notFound("server.notFound.order");
   return ok(order, { headers: { "Cache-Control": "no-store" } });
 });

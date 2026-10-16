@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from "react";
 import { CheckCircle2, AlertCircle, Info, X } from "lucide-react";
 import { cn } from "@/lib/cn";
+import { useLocalizePath, useT } from "@/i18n/client";
 
 type ToastTone = "success" | "error" | "info";
 type Toast = { id: number; tone: ToastTone; title: string; description?: string; action?: { label: string; href: string } };
@@ -17,6 +18,8 @@ type ToastApi = {
 const ToastContext = createContext<ToastApi | null>(null);
 
 export function ToastProvider({ children }: { children: ReactNode }) {
+  const tr = useT();
+  const lp = useLocalizePath();
   const [toasts, setToasts] = useState<Toast[]>([]);
   const nextId = useRef(1);
 
@@ -63,12 +66,12 @@ export function ToastProvider({ children }: { children: ReactNode }) {
               <p className="text-sm font-semibold text-ink">{t.title}</p>
               {t.description && <p className="mt-0.5 text-[13px] leading-relaxed text-ink-muted">{t.description}</p>}
               {t.action && (
-                <a href={t.action.href} className="mt-2 inline-block text-[13px] font-semibold text-brand hover:underline">
+                <a href={lp(t.action.href)} className="mt-2 inline-block text-[13px] font-semibold text-brand hover:underline">
                   {t.action.label}
                 </a>
               )}
             </div>
-            <button type="button" onClick={() => dismiss(t.id)} className="-m-1 rounded-full p-1 text-ink-muted hover:bg-cream hover:text-ink" aria-label="Dismiss notification">
+            <button type="button" onClick={() => dismiss(t.id)} className="-m-1 rounded-full p-1 text-ink-muted hover:bg-cream hover:text-ink" aria-label={tr("common.dismiss")}>
               <X className="h-4 w-4" />
             </button>
           </div>

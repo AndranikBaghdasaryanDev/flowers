@@ -1,4 +1,4 @@
-import { ApiError } from "@/lib/api/errors";
+import { ApiError, msg } from "@/lib/api/errors";
 import { ok, requireAnyPermission, route } from "@/lib/api/handler";
 import { env } from "@/lib/env";
 import { enforceRateLimit } from "@/lib/rate-limit";
@@ -12,16 +12,16 @@ export const POST = route(async (req) => {
   await enforceRateLimit(`upload:${user.id}`, 120, 60 * 60);
   const length = Number(req.headers.get("content-length") ?? 0);
   if (length > env.maxUploadBytes + 64 * 1024) {
-    throw new ApiError(413, "payload_too_large", `Images must be smaller than ${Math.round(env.maxUploadBytes / 1024 / 1024)} MB.`);
+    throw new ApiError(413, "payload_too_large", msg("server.errors.imageTooLarge", { mb: Math.round(env.maxUploadBytes / 1024 / 1024) }));
   }
   let form: FormData;
   try {
     form = await req.formData();
   } catch {
-    throw ApiError.badRequest("Expected a multipart form upload.");
+    throw ApiError.badRequest("server.errors.uploadMultipart");
   }
   const file = form.get("file");
-  if (!(file instanceof File)) throw ApiError.validation("Choose an image to upload.", { file: "Choose an image." });
+  if (!(file instanceof File)) throw ApiError.validation("server.errors.chooseImageUpload", { file: "server.errors.chooseImage" });
   const purposeRaw = String(form.get("purpose") ?? "product");
   const purpose = (PURPOSES.includes(purposeRaw as MediaPurpose) ? purposeRaw : "product") as MediaPurpose;
   const alt = String(form.get("alt") ?? "").slice(0, 300);

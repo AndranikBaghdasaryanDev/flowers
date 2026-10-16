@@ -1,4 +1,7 @@
+"use client";
+
 import type { ComponentProps, ReactNode } from "react";
+import { useT } from "@/i18n/client";
 import { cn } from "@/lib/cn";
 
 export const inputClasses =
@@ -17,6 +20,7 @@ type FieldProps = {
 
 /** Label + control + hint/error, wired for screen readers via ids `${id}-hint` / `${id}-error`. */
 export function Field({ id, label, error, hint, required, optional, className, children }: FieldProps) {
+  const t = useT();
   return (
     <div className={cn("space-y-1.5", className)}>
       <label htmlFor={id} className="flex items-baseline justify-between gap-2 text-[13px] font-semibold text-ink">
@@ -24,7 +28,7 @@ export function Field({ id, label, error, hint, required, optional, className, c
           {label}
           {required && <span className="ml-0.5 text-brand" aria-hidden="true">*</span>}
         </span>
-        {optional && <span className="text-xs font-normal text-ink-muted">Optional</span>}
+        {optional && <span className="text-xs font-normal text-ink-muted">{t("common.optional")}</span>}
       </label>
       {children}
       {error ? (

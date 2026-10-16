@@ -7,8 +7,8 @@ import { Courier, DeliveryMethod } from "@/lib/models/delivery";
 import { User } from "@/lib/models/user";
 import { Notification } from "@/lib/models/system";
 import { Review } from "@/lib/models/content";
-import { ApiError } from "@/lib/api/errors";
-import { isDuplicateKeyError } from "@/lib/api/handler";
+import { ApiError, isDuplicateKeyError, msg, notFound, type TextTranslator } from "@/lib/api/errors";
+import { DEFAULT_LOCALE, type Locale } from "@/i18n/config";
 import { generateToken, hashToken } from "@/lib/auth/tokens";
 import type { SessionUser } from "@/lib/auth/session";
 import { hasPermission } from "@/lib/domain/roles";
@@ -33,7 +33,9 @@ import type { deliveryAssignSchema, orderListQuerySchema, paymentChangeSchema, s
 import { loadSettings, type StoreSettings } from "@/lib/services/settings";
 import {
   checkSchedule,
+  findZone,
   getActiveDeliveryMethod,
+  isMethodCity,
   isPaymentMethodEnabled,
   paymentMethodFor,
 } from "@/lib/services/delivery";
@@ -67,36 +69,48 @@ async function nextOrderNumber(session: mongoose.ClientSession): Promise<string>
 
 export type CreateOrderResult = { order: CustomerOrderDTO; trackingToken: string; replayed: boolean };
 
-export async function createOrder(input: CheckoutInput, user: SessionUser | null): Promise<CreateOrderResult> {
+export type CreateOrderOptions = {
+  /** Language of the storefront the order is placed from (stored on the order; used for emails). */
+  locale?: Locale;
+  /** Translator for messages embedded in the response (e.g. the refreshed quote on a conflict). */
+  t?: TextTranslator;
+};
+
+export async function createOrder(input: CheckoutInput, user: SessionUser | null, opts: CreateOrderOptions = {}): Promise<CreateOrderResult> {
   await connectDb();
   const settings = await loadSettings();
 
   if (!user && !settings.checkout.guestCheckout) {
-    throw ApiError.unauthenticated("Please sign in to place an order.");
+    throw ApiError.unauthenticated("server.checkout.signInRequired");
   }
 
   const replay = await findReplay(input.idempotencyKey, user, input.customer.email);
   if (replay) return replay;
 
   const method = await getActiveDeliveryMethod(input.deliveryMethodId);
-  if (!method) throw ApiError.validation("This delivery option is no longer available.", { deliveryMethodId: "Choose an available option." });
+  if (!method) throw ApiError.validation("server.checkout.methodUnavailable", { deliveryMethodId: "server.checkout.chooseAvailableOption" });
 
   const expectedPayment = paymentMethodFor(method);
   if (input.paymentMethod !== expectedPayment || !isPaymentMethodEnabled(input.paymentMethod, settings)) {
-    throw ApiError.validation("This payment method cannot be used with the selected option.", {
-      paymentMethod: "Choose an available payment method.",
+    throw ApiError.validation("server.checkout.paymentUnavailable", {
+      paymentMethod: "server.checkout.choosePayment",
     });
   }
 
   let address: OrderDoc["address"] = null;
   if (method.type === "delivery") {
-    if (!input.address) throw ApiError.validation("Enter the delivery address.", { "address.street": "Enter the delivery address." });
-    if (method.city && input.address.city.trim().toLowerCase() !== method.city.toLowerCase()) {
-      throw ApiError.validation(`We currently deliver only within ${method.city}.`, { "address.city": `Delivery is available in ${method.city} only.` });
+    if (!input.address) throw ApiError.validation("server.checkout.enterAddress", { "address.street": "server.checkout.enterAddress" });
+    if (method.city && !isMethodCity(method, input.address.city)) {
+      const cityName = (await getActiveDeliveryMethod(method.id, opts.locale))?.city || method.city;
+      throw ApiError.validation(msg("server.checkout.cityOnly", { city: cityName }), {
+        "address.city": msg("server.checkout.cityOnlyField", { city: cityName }),
+      });
     }
+    // Areas and the city may be chosen in any language; the order stores the canonical (English) names.
+    if (method.city) input.address.city = method.city;
     if (method.zones.length > 0) {
-      const zone = method.zones.find((z) => z.name.toLowerCase() === (input.address?.zone ?? "").trim().toLowerCase());
-      if (!zone) throw ApiError.validation("We do not deliver to this area.", { "address.zone": "Choose a delivery area from the list." });
+      const zone = findZone(method, input.address.zone);
+      if (!zone) throw ApiError.validation("server.checkout.zoneNotCovered", { "address.zone": "server.checkout.chooseZone" });
       input.address.zone = zone.name;
     }
     address = { ...input.address };
@@ -110,24 +124,24 @@ export async function createOrder(input: CheckoutInput, user: SessionUser | null
   let created: OrderDoc;
   try {
     created = await withTransaction(async (session) => {
-      const quote = await priceCart(input.items, settings, { method, zone: address?.zone ?? undefined, session });
+      const quote = await priceCart(input.items, settings, { method, zone: address?.zone ?? undefined, session, t: opts.t });
+      const publicQuote = { ...quote, priced: undefined, notes: undefined };
       const problems = quote.priced.filter((l) => l.status !== "ok");
       if (problems.length > 0 || quote.itemCount === 0) {
-        throw ApiError.conflict("Some items in your cart have changed. Please review your cart before ordering.", {
+        throw ApiError.conflict("server.checkout.cartChanged", {
           reason: "cart_changed",
-          quote: { ...quote, priced: undefined },
+          quote: publicQuote,
         });
       }
-      if (quote.issues.length > 0) throw ApiError.validation(quote.issues[0]);
+      if (quote.notes.issues.length > 0) throw ApiError.validation(quote.notes.issues[0]);
       if (quote.deliveryFee === null) {
-        throw ApiError.validation(quote.deliveryMessage || "Delivery is not available for this address.", {
-          "address.zone": quote.deliveryMessage,
-        });
+        const note = quote.notes.delivery ?? msg("server.checkout.deliveryUnavailable");
+        throw ApiError.validation(note, { "address.zone": note });
       }
       if (input.expectedTotal !== undefined && input.expectedTotal !== quote.total) {
-        throw ApiError.conflict("Prices have been updated since you started checkout. Please review the new total.", {
+        throw ApiError.conflict("server.checkout.pricesChanged", {
           reason: "total_changed",
-          quote: { ...quote, priced: undefined },
+          quote: publicQuote,
         });
       }
 
@@ -140,7 +154,7 @@ export async function createOrder(input: CheckoutInput, user: SessionUser | null
             { session },
           );
           if (res.modifiedCount !== 1) {
-            throw ApiError.conflict(`“${doc.name}” has just sold out or has fewer items left. Please review your cart.`, {
+            throw ApiError.conflict(msg("server.checkout.soldOut", { name: line.name }), {
               reason: "stock",
             });
           }
@@ -158,6 +172,7 @@ export async function createOrder(input: CheckoutInput, user: SessionUser | null
             idempotencyKey: input.idempotencyKey,
             accessTokenHashes: [hashToken(token)],
             user: user?.id ?? null,
+            locale: opts.locale ?? DEFAULT_LOCALE,
             customer: { name: input.customer.name, email: input.customer.email, phone: input.customer.phone },
             recipient: { name: input.recipient?.name ?? "", phone: input.recipient?.phone ?? "" },
             fulfillment: { kind: method.type, method: method.id, methodName: method.name, requiresCourier: method.requiresCourier },
@@ -222,7 +237,7 @@ async function findReplay(key: string, user: SessionUser | null, email: string):
   const existing = await Order.findOne({ idempotencyKey: key }).lean<OrderDoc>();
   if (!existing) return null;
   const sameOwner = user ? String(existing.user) === user.id : !existing.user && existing.customer.email === email.toLowerCase();
-  if (!sameOwner) throw ApiError.conflict("This checkout session has already been used. Please refresh the page.");
+  if (!sameOwner) throw ApiError.conflict("server.checkout.sessionUsed");
   const token = generateToken();
   await Order.updateOne({ _id: existing._id }, { $push: { accessTokenHashes: { $each: [hashToken(token)], $slice: -5 } } });
   const settings = await loadSettings();
@@ -426,15 +441,15 @@ export async function listOrdersForUser(userId: string, page = 1): Promise<Pagin
 type Actor = { user: SessionUser | null; type: "staff" | "customer" | "system" };
 
 async function loadOrderOrThrow(orderId: string): Promise<OrderDoc> {
-  if (!mongoose.isValidObjectId(orderId)) throw ApiError.notFound("Order not found.");
+  if (!mongoose.isValidObjectId(orderId)) throw notFound("order");
   const order = await Order.findById(orderId).lean<OrderDoc>();
-  if (!order) throw ApiError.notFound("Order not found.");
+  if (!order) throw notFound("order");
   return order;
 }
 
 function assertVersion(order: OrderDoc, expected: number) {
   if ((order.version ?? 0) !== expected) {
-    throw ApiError.conflict("This order was updated by someone else. Reload to see the latest version.", { reason: "stale_version" });
+    throw ApiError.conflict("server.orders.staleVersion", { reason: "stale_version" });
   }
 }
 
@@ -456,7 +471,7 @@ async function applyTransition(
   });
   if (!check.ok) throw ApiError.conflict(check.reason, { reason: "invalid_transition" });
   if ((to === "cancelled" || to === "delivery_failed") && actor.type === "staff" && (opts.reason ?? "").trim().length < 3) {
-    throw ApiError.validation("Please give a short reason.", { reason: "Please give a short reason." });
+    throw ApiError.validation("server.orders.giveReason", { reason: "server.orders.giveReason" });
   }
 
   const now = new Date();
@@ -500,7 +515,7 @@ async function applyTransition(
       { session },
     );
     if (res.modifiedCount !== 1) {
-      throw ApiError.conflict("This order was updated by someone else. Reload to see the latest version.", { reason: "stale_version" });
+      throw ApiError.conflict("server.orders.staleVersion", { reason: "stale_version" });
     }
     if (to === "cancelled") {
       for (const item of order.items) {
@@ -541,7 +556,7 @@ export async function changeOrderStatus(
 ): Promise<StaffOrderDTO> {
   await connectDb();
   if (!hasPermission(user.role, permissionForTransition(input.to))) {
-    throw ApiError.forbidden("Your role cannot perform this status change.");
+    throw ApiError.forbidden("server.orders.roleCannotChange");
   }
   const order = await loadOrderOrThrow(orderId);
   assertVersion(order, input.expectedVersion);
@@ -554,7 +569,7 @@ export async function changeOrderStatus(
 export async function cancelOrderAsCustomer(order: OrderDoc, user: SessionUser | null): Promise<void> {
   const settings = await loadSettings();
   if (!settings.checkout.allowCustomerCancel || !CUSTOMER_CANCELLABLE.includes(order.status as OrderStatus)) {
-    throw ApiError.conflict("This order can no longer be cancelled online. Please contact us.");
+    throw ApiError.conflict("server.orders.cannotCancel");
   }
   const updated = await applyTransition(order, "cancelled", { user, type: "customer" }, { reason: "Cancelled by customer" });
   invalidateBestsellers();
@@ -563,16 +578,16 @@ export async function cancelOrderAsCustomer(order: OrderDoc, user: SessionUser |
 
 export async function cancelOwnOrder(orderId: string, user: SessionUser) {
   await connectDb();
-  if (!mongoose.isValidObjectId(orderId)) throw ApiError.notFound("Order not found.");
+  if (!mongoose.isValidObjectId(orderId)) throw notFound("order");
   const order = await Order.findOne({ _id: orderId, user: user.id }).lean<OrderDoc>();
-  if (!order) throw ApiError.notFound("Order not found.");
+  if (!order) throw notFound("order");
   await cancelOrderAsCustomer(order, user);
 }
 
 export async function cancelOrderByToken(orderNumber: string, token: string) {
   await connectDb();
   const order = await Order.findOne({ orderNumber: orderNumber.trim().toUpperCase(), accessTokenHashes: hashToken(token) }).lean<OrderDoc>();
-  if (!order) throw ApiError.notFound("Order not found.");
+  if (!order) throw notFound("order");
   await cancelOrderAsCustomer(order, null);
 }
 
@@ -600,7 +615,7 @@ export async function changePaymentStatus(
       },
     },
   );
-  if (res.modifiedCount !== 1) throw ApiError.conflict("This order was updated by someone else. Reload to see the latest version.");
+  if (res.modifiedCount !== 1) throw ApiError.conflict("server.orders.staleVersion");
   await audit({
     actor: user,
     action: "order.payment",
@@ -621,13 +636,13 @@ export async function assignDelivery(
   await connectDb();
   const order = await loadOrderOrThrow(orderId);
   assertVersion(order, input.expectedVersion);
-  if (order.fulfillment.kind !== "delivery") throw ApiError.conflict("Pickup orders do not have delivery assignments.");
+  if (order.fulfillment.kind !== "delivery") throw ApiError.conflict("server.orders.pickupNoDelivery");
   const status = order.status as OrderStatus;
   if (["delivered", "completed", "cancelled"].includes(status)) {
-    throw ApiError.conflict("Delivery details cannot be changed after the order is closed.");
+    throw ApiError.conflict("server.orders.deliveryClosed");
   }
   if (status === "out_for_delivery" && !input.courierId) {
-    throw ApiError.conflict("The order is already out for delivery. Mark the delivery as failed or delivered before removing the courier.");
+    throw ApiError.conflict("server.orders.alreadyOut");
   }
 
   let courierName = "";
@@ -637,7 +652,7 @@ export async function assignDelivery(
   let vehicleRegistration = input.vehicleRegistration;
   if (input.courierId) {
     const courier = await Courier.findOne({ _id: input.courierId, isActive: true }).lean();
-    if (!courier) throw ApiError.validation("Choose an active courier.", { courierId: "Choose an active courier." });
+    if (!courier) throw ApiError.validation("server.orders.chooseCourier", { courierId: "server.orders.chooseCourier" });
     courierName = courier.name;
     courierPhone = courier.phone ?? "";
     vehicleType = vehicleType ?? (courier.vehicleType as VehicleType);
@@ -683,7 +698,7 @@ export async function assignDelivery(
       },
     },
   );
-  if (res.modifiedCount !== 1) throw ApiError.conflict("This order was updated by someone else. Reload to see the latest version.");
+  if (res.modifiedCount !== 1) throw ApiError.conflict("server.orders.staleVersion");
   await audit({ actor: user, action: "order.delivery", entityType: "order", entityId: String(order._id), summary: `${order.orderNumber}: ${summary}` });
   return toStaffOrderDTO((await Order.findById(order._id).lean<OrderDoc>())!);
 }

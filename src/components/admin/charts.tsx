@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { Link, useT } from "@/i18n/client";
 import { useId, useState } from "react";
 import { Table2, BarChart3 } from "lucide-react";
 import { cn } from "@/lib/cn";
@@ -27,7 +27,7 @@ export function ColumnChart({
   format,
   height = 220,
   integer = false,
-  emptyText = "No data for this period.",
+  emptyText,
 }: {
   title: string;
   points: SeriesPoint[];
@@ -37,6 +37,7 @@ export function ColumnChart({
   integer?: boolean;
   emptyText?: string;
 }) {
+  const t = useT();
   const [hover, setHover] = useState<number | null>(null);
   const [asTable, setAsTable] = useState(false);
   const titleId = useId();
@@ -53,7 +54,7 @@ export function ColumnChart({
   const n = Math.max(points.length, 1);
   const slot = plotW / n;
   const barW = Math.max(3, Math.min(36, slot - 2));
-  const ticks = [0, 0.25, 0.5, 0.75, 1].map((t) => t * max);
+  const ticks = [0, 0.25, 0.5, 0.75, 1].map((k) => k * max);
   const labelEvery = Math.ceil(n / 10);
 
   return (
@@ -64,22 +65,22 @@ export function ColumnChart({
         </figcaption>
         <button
           type="button"
-          onClick={() => setAsTable((t) => !t)}
+          onClick={() => setAsTable((v) => !v)}
           className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-semibold text-ink-muted hover:bg-cream hover:text-ink"
           aria-pressed={asTable}
         >
-          {asTable ? <BarChart3 className="h-3.5 w-3.5" /> : <Table2 className="h-3.5 w-3.5" />} {asTable ? "Chart" : "Table"}
+          {asTable ? <BarChart3 className="h-3.5 w-3.5" /> : <Table2 className="h-3.5 w-3.5" />} {asTable ? t("admin.analytics.chart") : t("admin.analytics.table")}
         </button>
       </div>
       {total === 0 ? (
-        <p className="flex h-40 items-center justify-center rounded-xl bg-cream/50 text-sm text-ink-muted">{emptyText}</p>
+        <p className="flex h-40 items-center justify-center rounded-xl bg-cream/50 text-sm text-ink-muted">{emptyText ?? t("admin.analytics.noData")}</p>
       ) : asTable ? (
         <div className="max-h-[300px] overflow-auto">
           <table className="w-full text-left text-[13px]">
             <thead>
               <tr className="text-ink-muted">
-                <th className="py-1.5 font-semibold">Day</th>
-                <th className="py-1.5 text-right font-semibold">Value</th>
+                <th className="py-1.5 font-semibold">{t("admin.analytics.day")}</th>
+                <th className="py-1.5 text-right font-semibold">{t("admin.analytics.value")}</th>
               </tr>
             </thead>
             <tbody>
@@ -94,14 +95,14 @@ export function ColumnChart({
         </div>
       ) : (
         <div className="relative">
-          <svg viewBox={`0 0 ${W} ${H}`} className="h-auto w-full" role="img" aria-label={`${title}. Use the Table button for exact values.`} onMouseLeave={() => setHover(null)}>
-            {ticks.map((t) => {
-              const y = padT + plotH - (t / max) * plotH;
+          <svg viewBox={`0 0 ${W} ${H}`} className="h-auto w-full" role="img" aria-label={t("admin.analytics.chartAria", { title })} onMouseLeave={() => setHover(null)}>
+            {ticks.map((tick) => {
+              const y = padT + plotH - (tick / max) * plotH;
               return (
-                <g key={t}>
+                <g key={tick}>
                   <line x1={padL} x2={W - 8} y1={y} y2={y} stroke="var(--color-line)" strokeWidth={1} />
                   <text x={padL - 8} y={y + 4} textAnchor="end" fontSize="11" fill="var(--color-ink-muted)">
-                    {format(t)}
+                    {format(tick)}
                   </text>
                 </g>
               );
@@ -154,7 +155,7 @@ export function BarList({
   items,
   format,
   secondary,
-  emptyText = "No data for this period.",
+  emptyText,
 }: {
   title: string;
   items: { key: string; label: string; value: number; secondary?: number; href?: string }[];
@@ -162,12 +163,13 @@ export function BarList({
   secondary?: (v: number) => string;
   emptyText?: string;
 }) {
+  const t = useT();
   const max = Math.max(...items.map((i) => i.value), 0);
   return (
     <section className="rounded-2xl border border-line bg-paper p-5" aria-label={title}>
       <h3 className="mb-4 font-sans text-[15px] font-semibold tracking-normal text-ink">{title}</h3>
       {items.length === 0 || max === 0 ? (
-        <p className="rounded-xl bg-cream/50 py-8 text-center text-sm text-ink-muted">{emptyText}</p>
+        <p className="rounded-xl bg-cream/50 py-8 text-center text-sm text-ink-muted">{emptyText ?? t("admin.analytics.noData")}</p>
       ) : (
         <ul className="space-y-3">
           {items.map((i) => (

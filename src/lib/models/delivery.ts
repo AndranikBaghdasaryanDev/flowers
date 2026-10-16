@@ -1,5 +1,5 @@
 import { FULFILLMENT_TYPES, VEHICLE_TYPES, type FulfillmentType, type VehicleType } from "@/lib/domain/orders";
-import { defineSchema, getModel, type Id } from "./_util";
+import { defineSchema, getModel, i18nField, type I18nOverrides, type Id } from "./_util";
 
 const zoneSchema = defineSchema(
   {
@@ -41,9 +41,15 @@ const deliveryMethodSchema = defineSchema(
     requiresCourier: { type: Boolean, default: false },
     pickupAddress: { type: String, trim: true, maxlength: 300, default: "" },
     sortOrder: { type: Number, default: 0 },
+    /** Translated text; `zones` holds area names aligned with `zones` above by position. */
+    i18n: i18nField({ name: 80, description: 500, city: 80, estimatedTime: 120, pickupAddress: 300, zones: [80] }),
   },
   { timestamps: true },
 );
+
+export type DeliveryMethodText = Pick<DeliveryMethodDoc, "name" | "description" | "city" | "estimatedTime" | "pickupAddress"> & {
+  zones: string[];
+};
 
 export interface DeliveryMethodDoc {
   _id: Id;
@@ -64,6 +70,7 @@ export interface DeliveryMethodDoc {
   requiresCourier: boolean;
   pickupAddress: string;
   sortOrder: number;
+  i18n?: I18nOverrides<DeliveryMethodText>;
 }
 export const DeliveryMethod = getModel<DeliveryMethodDoc>("DeliveryMethod", deliveryMethodSchema);
 

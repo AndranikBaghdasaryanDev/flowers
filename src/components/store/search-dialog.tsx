@@ -1,8 +1,8 @@
 "use client";
 
 import Image from "next/image";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { Link } from "@/i18n/client";
+import { useLocalizedRouter, useT } from "@/i18n/client";
 import { useEffect, useId, useState } from "react";
 import { Search, ArrowRight } from "lucide-react";
 import { Modal } from "@/components/ui/modal";
@@ -13,7 +13,8 @@ import type { ProductCardDTO } from "@/lib/types";
 
 /** Search overlay with live results from the catalogue API. */
 export function SearchDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const router = useRouter();
+  const router = useLocalizedRouter();
+  const t = useT();
   const inputId = useId();
   const [q, setQ] = useState("");
   const [results, setResults] = useState<ProductCardDTO[] | null>(null);
@@ -54,10 +55,10 @@ export function SearchDialog({ open, onClose }: { open: boolean; onClose: () => 
   };
 
   return (
-    <Modal open={open} onClose={onClose} title="Search" size="lg">
+    <Modal open={open} onClose={onClose} title={t("search.title")} size="lg">
       <form onSubmit={submit} role="search">
         <label htmlFor={inputId} className="sr-only">
-          Search flowers, colours or occasions
+          {t("search.label")}
         </label>
         <div className="relative">
           <Search className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-ink-muted" />
@@ -67,7 +68,7 @@ export function SearchDialog({ open, onClose }: { open: boolean; onClose: () => 
             type="search"
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Roses, peonies, birthday…"
+            placeholder={t("search.placeholder")}
             className="h-14 w-full rounded-2xl border border-line bg-paper pl-12 pr-12 text-[17px] text-ink placeholder:text-ink-muted/70 focus:border-brand focus:outline-none focus:ring-4 focus:ring-brand/10"
             maxLength={80}
           />
@@ -76,9 +77,9 @@ export function SearchDialog({ open, onClose }: { open: boolean; onClose: () => 
       </form>
       <div className="mt-5" aria-live="polite">
         {visibleResults === null ? (
-          <p className="text-sm text-ink-muted">Type at least two letters to search the collection.</p>
+          <p className="text-sm text-ink-muted">{t("search.hint")}</p>
         ) : visibleResults.length === 0 ? (
-          <p className="text-sm text-ink-muted">No flowers match “{q.trim()}”. Try another word or browse the shop.</p>
+          <p className="text-sm text-ink-muted">{t("search.noResults", { query: q.trim() })}</p>
         ) : (
           <>
             <ul className="divide-y divide-line">
@@ -99,7 +100,7 @@ export function SearchDialog({ open, onClose }: { open: boolean; onClose: () => 
             </ul>
             {total > visibleResults.length && (
               <button type="button" onClick={showAll} className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-brand hover:underline">
-                See all {total} results <ArrowRight className="h-4 w-4" />
+                {t("search.seeAll", { count: total })} <ArrowRight className="h-4 w-4" />
               </button>
             )}
           </>

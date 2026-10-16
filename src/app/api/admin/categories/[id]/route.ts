@@ -5,7 +5,7 @@ import { deleteCategory, updateCategory } from "@/lib/services/admin-catalog";
 export const PUT = route<{ id: string }>(async (req, ctx) => {
   const user = await requirePermission("categories:manage");
   const { id } = await ctx.params;
-  assertObjectId(id, "Category");
+  assertObjectId(id, "category");
   const input = await readJson(req, categoryInputSchema);
   await updateCategory(id, input, user);
   return ok({ id });
@@ -15,7 +15,7 @@ export const PUT = route<{ id: string }>(async (req, ctx) => {
 export const DELETE = route<{ id: string }>(async (req, ctx) => {
   const user = await requirePermission("categories:manage");
   const { id } = await ctx.params;
-  assertObjectId(id, "Category");
+  assertObjectId(id, "category");
   const raw = req.nextUrl.searchParams.get("reassignTo");
   const reassignTo = raw ? objectIdSchema.parse(raw) : null;
   await deleteCategory(id, reassignTo, user);

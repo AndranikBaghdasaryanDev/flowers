@@ -1,4 +1,4 @@
-import { ok, readJson, route } from "@/lib/api/handler";
+import { ok, readJson, requestTranslator, route } from "@/lib/api/handler";
 import { checkoutSchema } from "@/lib/validation";
 import { getSessionUser } from "@/lib/auth/session";
 import { clientIp } from "@/lib/auth/session";
@@ -14,6 +14,7 @@ export const POST = route(async (req) => {
   await enforceRateLimit(`checkout:${ip}`, 20, 10 * 60);
   const input = await readJson(req, checkoutSchema);
   const user = await getSessionUser();
-  const result = await createOrder(input, user);
+  const t = await requestTranslator();
+  const result = await createOrder(input, user, { locale: t.locale, t });
   return ok(result, { status: result.replayed ? 200 : 201 });
 });

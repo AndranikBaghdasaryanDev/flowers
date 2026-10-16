@@ -5,7 +5,7 @@ import { listStaff, updateStaff } from "@/lib/services/admin";
 export const PATCH = route<{ id: string }>(async (req, ctx) => {
   const user = await requirePermission("staff:manage");
   const { id } = await ctx.params;
-  assertObjectId(id, "Staff member");
+  assertObjectId(id, "staffMember");
   const input = await readJson(req, staffRoleSchema);
   await updateStaff(id, input.role, input.status, user);
   return ok(await listStaff());

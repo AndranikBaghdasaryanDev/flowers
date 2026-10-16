@@ -14,6 +14,8 @@ export default defineConfig({
   reporter: [["list"]],
   use: {
     baseURL: process.env.E2E_BASE_URL ?? "http://localhost:3000",
+    // The journey specs assert English copy; the browser language drives locale negotiation.
+    locale: "en-GB",
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
   },

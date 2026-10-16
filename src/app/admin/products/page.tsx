@@ -1,5 +1,6 @@
+import type { Metadata } from "next";
 import Image from "next/image";
-import Link from "next/link";
+import { Link } from "@/i18n/client";
 import { connection } from "next/server";
 import { Plus } from "lucide-react";
 import { requireStaffPage } from "@/lib/auth/guards";
@@ -11,24 +12,28 @@ import { Badge } from "@/components/ui/badge";
 import { LinkButton } from "@/components/ui/button";
 import { Pagination } from "@/components/ui/pagination";
 import { ImageFallback } from "@/components/store/image-fallback";
-import { formatMoney } from "@/lib/domain/money";
+import { getAdminI18n } from "@/i18n/server";
 import { ProductRowActions } from "./product-row-actions";
 
-export const metadata = { title: "Products" };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getAdminI18n();
+  return { title: t("admin.products.title") };
+}
 export const instant = false;
 
 const STATUS = [
-  { value: "", label: "All" },
-  { value: "active", label: "Published" },
-  { value: "inactive", label: "Unpublished" },
-  { value: "featured", label: "Featured" },
-  { value: "archived", label: "Archived" },
-];
+  { value: "", label: "admin.common.all" },
+  { value: "active", label: "admin.products.published" },
+  { value: "inactive", label: "admin.products.unpublished" },
+  { value: "featured", label: "admin.common.featured" },
+  { value: "archived", label: "admin.products.archived" },
+] as const;
 
 export default async function AdminProductsPage({ searchParams }: PageProps<"/admin/products">) {
   await connection();
+  const { t, f } = await getAdminI18n();
   const { allowed } = await requireStaffPage("/admin/products", "products:manage");
-  if (!allowed) return <NoAccess what="products" />;
+  if (!allowed) return <NoAccess what={t("admin.nav.products")} />;
   const raw = await searchParams;
   const flat: Record<string, string> = {};
   for (const [k, v] of Object.entries(raw)) if (typeof v === "string") flat[k] = v.slice(0, 80);
@@ -50,41 +55,41 @@ export default async function AdminProductsPage({ searchParams }: PageProps<"/ad
 
   const stock = (p: (typeof result.items)[number]) =>
     p.trackInventory ? (
-      <Badge tone={(p.stockQuantity ?? 0) === 0 ? "danger" : (p.stockQuantity ?? 0) <= 5 ? "warning" : "neutral"}>{p.stockQuantity ?? 0} in stock</Badge>
+      <Badge tone={(p.stockQuantity ?? 0) === 0 ? "danger" : (p.stockQuantity ?? 0) <= 5 ? "warning" : "neutral"}>{t("admin.products.inStock", { count: p.stockQuantity ?? 0 })}</Badge>
     ) : (
-      <span className="text-ink-muted">Not tracked</span>
+      <span className="text-ink-muted">{t("admin.products.notTracked")}</span>
     );
 
   return (
     <>
       <AdminPageHeader
-        title={flat.availability === "low_stock" ? "Inventory" : "Products"}
-        description={`${result.total} ${result.total === 1 ? "product" : "products"}`}
+        title={flat.availability === "low_stock" ? t("admin.nav.inventory") : t("admin.products.title")}
+        description={t("admin.products.count", { count: result.total })}
         actions={
           <LinkButton href="/admin/products/new" size="sm" icon={<Plus className="h-4 w-4" />}>
-            New product
+            {t("admin.products.new")}
           </LinkButton>
         }
       />
       <div className="mb-4 -mx-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:flex-wrap sm:px-0">
         {STATUS.map((s) => (
           <FilterLink key={s.value} href={href({ status: s.value || null })} active={(flat.status ?? "") === s.value}>
-            {s.label}
+            {t(s.label)}
           </FilterLink>
         ))}
       </div>
       <div className="mb-5 flex flex-wrap items-center gap-2">
-        <SearchBox placeholder="Search name, slug, flowers" />
-        <SelectFilter param="category" label="Category" options={[{ value: "", label: "All categories" }, ...cats.filter((c) => c.kind === "collection").map((c) => ({ value: c.id, label: c.name }))]} />
+        <SearchBox placeholder={t("admin.products.searchPlaceholder")} />
+        <SelectFilter param="category" label={t("admin.products.category")} options={[{ value: "", label: t("admin.products.allCategories") }, ...cats.filter((c) => c.kind === "collection").map((c) => ({ value: c.id, label: c.name }))]} />
         <SelectFilter
           param="availability"
-          label="Stock"
+          label={t("admin.products.stock")}
           options={[
-            { value: "", label: "Any availability" },
-            { value: "available", label: "Available" },
-            { value: "unavailable", label: "Unavailable" },
-            { value: "low_stock", label: "Low stock (≤ 5)" },
-            { value: "out_of_stock", label: "Out of stock" },
+            { value: "", label: t("admin.products.anyAvailability") },
+            { value: "available", label: t("admin.products.available") },
+            { value: "unavailable", label: t("admin.products.unavailable") },
+            { value: "low_stock", label: t("admin.products.lowStock") },
+            { value: "out_of_stock", label: t("admin.products.outOfStock") },
           ]}
         />
       </div>
@@ -92,9 +97,9 @@ export default async function AdminProductsPage({ searchParams }: PageProps<"/ad
       <Panel padded={false}>
         {result.items.length === 0 ? (
           <div className="px-5 py-16 text-center">
-            <p className="text-sm text-ink-muted">No products match these filters.</p>
+            <p className="text-sm text-ink-muted">{t("admin.products.empty")}</p>
             <LinkButton href="/admin/products/new" variant="soft" size="sm" className="mt-4">
-              Create a product
+              {t("admin.products.create")}
             </LinkButton>
           </div>
         ) : (
@@ -102,13 +107,13 @@ export default async function AdminProductsPage({ searchParams }: PageProps<"/ad
             <Table>
               <thead>
                 <tr>
-                  <th className={th}>Product</th>
-                  <th className={th}>Category</th>
-                  <th className={`${th} text-right`}>Price</th>
-                  <th className={th}>Stock</th>
-                  <th className={th}>Status</th>
-                  <th className={`${th} text-right`}>Sold</th>
-                  <th className={`${th} text-right`}>Actions</th>
+                  <th className={th}>{t("admin.products.product")}</th>
+                  <th className={th}>{t("admin.products.category")}</th>
+                  <th className={`${th} text-right`}>{t("admin.products.price")}</th>
+                  <th className={th}>{t("admin.products.stock")}</th>
+                  <th className={th}>{t("admin.common.status")}</th>
+                  <th className={`${th} text-right`}>{t("admin.products.sold")}</th>
+                  <th className={`${th} text-right`}>{t("admin.common.actions")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -129,18 +134,18 @@ export default async function AdminProductsPage({ searchParams }: PageProps<"/ad
                     </td>
                     <td className={`${td} text-ink-soft`}>{p.categoryName}</td>
                     <td className={`${td} text-right tabular`}>
-                      {formatMoney(p.price, settings.currency)}
-                      {p.compareAtPrice && p.compareAtPrice > p.price && <p className="text-xs text-ink-muted line-through">{formatMoney(p.compareAtPrice, settings.currency)}</p>}
+                      {f.money(p.price, settings.currency)}
+                      {p.compareAtPrice && p.compareAtPrice > p.price && <p className="text-xs text-ink-muted line-through">{f.money(p.compareAtPrice, settings.currency)}</p>}
                     </td>
                     <td className={td}>{stock(p)}</td>
                     <td className={td}>
                       <div className="flex flex-wrap gap-1">
-                        {p.isArchived ? <Badge tone="neutral">Archived</Badge> : p.isActive ? <Badge tone="success">Published</Badge> : <Badge tone="warning">Unpublished</Badge>}
-                        {p.availability === "unavailable" && !p.isArchived && <Badge tone="neutral">Unavailable</Badge>}
-                        {p.isSample && <Badge tone="info">Sample</Badge>}
+                        {p.isArchived ? <Badge tone="neutral">{t("admin.products.archived")}</Badge> : p.isActive ? <Badge tone="success">{t("admin.products.published")}</Badge> : <Badge tone="warning">{t("admin.products.unpublished")}</Badge>}
+                        {p.availability === "unavailable" && !p.isArchived && <Badge tone="neutral">{t("admin.products.unavailable")}</Badge>}
+                        {p.isSample && <Badge tone="info">{t("admin.common.sample")}</Badge>}
                       </div>
                     </td>
-                    <td className={`${td} text-right tabular text-ink-soft`}>{p.unitsSold}</td>
+                    <td className={`${td} text-right tabular text-ink-soft`}>{f.number(p.unitsSold)}</td>
                     <td className={td}>
                       <ProductRowActions id={p.id} name={p.name} isActive={p.isActive} isFeatured={p.isFeatured} isArchived={p.isArchived} hasImages={Boolean(p.image)} />
                     </td>
@@ -159,12 +164,12 @@ export default async function AdminProductsPage({ searchParams }: PageProps<"/ad
                       {p.name}
                     </Link>
                     <p className="text-[13px] text-ink-muted">
-                      {p.categoryName} · <span className="tabular">{formatMoney(p.price, settings.currency)}</span>
+                      {p.categoryName} · <span className="tabular">{f.money(p.price, settings.currency)}</span>
                     </p>
                     <div className="mt-1.5 flex flex-wrap items-center gap-1">
-                      {p.isArchived ? <Badge tone="neutral">Archived</Badge> : p.isActive ? <Badge tone="success">Published</Badge> : <Badge tone="warning">Unpublished</Badge>}
+                      {p.isArchived ? <Badge tone="neutral">{t("admin.products.archived")}</Badge> : p.isActive ? <Badge tone="success">{t("admin.products.published")}</Badge> : <Badge tone="warning">{t("admin.products.unpublished")}</Badge>}
                       {p.trackInventory && stock(p)}
-                      {p.isSample && <Badge tone="info">Sample</Badge>}
+                      {p.isSample && <Badge tone="info">{t("admin.common.sample")}</Badge>}
                     </div>
                     <div className="-ml-2 mt-1">
                       <ProductRowActions id={p.id} name={p.name} isActive={p.isActive} isFeatured={p.isFeatured} isArchived={p.isArchived} hasImages={Boolean(p.image)} />

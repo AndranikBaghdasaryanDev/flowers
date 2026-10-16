@@ -8,10 +8,12 @@ import { QuantityStepper } from "@/components/store/quantity-stepper";
 import { useCart } from "@/components/providers/cart-provider";
 import { useSession } from "@/components/providers/session-provider";
 import { cn } from "@/lib/cn";
+import { useT } from "@/i18n/client";
 import type { ProductDetailDTO } from "@/lib/types";
 
 export function ProductPurchase({ product }: { product: ProductDetailDTO }) {
   const cart = useCart();
+  const t = useT();
   const { favorites, toggleFavorite } = useSession();
   const [qty, setQty] = useState(1);
   const [giftOpen, setGiftOpen] = useState(false);
@@ -55,7 +57,7 @@ export function ProductPurchase({ product }: { product: ProductDetailDTO }) {
   };
 
   const disabled = !product.purchasable || remaining === 0;
-  const label = !product.purchasable ? "Currently unavailable" : remaining === 0 ? "Maximum quantity in bag" : added ? "Added to bag" : "Add to bag";
+  const label = !product.purchasable ? t("product.unavailable") : remaining === 0 ? t("product.maxInBag") : added ? t("product.addedShort") : t("product.addToBag");
 
   return (
     <div>
@@ -63,13 +65,13 @@ export function ProductPurchase({ product }: { product: ProductDetailDTO }) {
         <Price amount={product.price} compareAt={product.compareAtPrice} currency={product.currency} size="lg" />
         {product.compareAtPrice && (
           <span className="rounded-full bg-brand px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider text-white">
-            Save {Math.round((1 - product.price / product.compareAtPrice) * 100)}%
+            {t("product.save", { percent: Math.round((1 - product.price / product.compareAtPrice) * 100) })}
           </span>
         )}
       </div>
       <p className={cn("mt-2 flex items-center gap-2 text-sm font-medium", product.purchasable ? (product.lowStock !== null ? "text-warning" : "text-success") : "text-ink-muted")}>
         <span className="h-2 w-2 rounded-full bg-current" aria-hidden="true" />
-        {product.availabilityLabel}
+        {product.purchasable ? (product.lowStock !== null ? t("product.onlyLeft", { count: product.lowStock }) : t("product.available")) : t("product.unavailable")}
       </p>
 
       {product.allowGiftMessage && product.purchasable && (
@@ -82,20 +84,20 @@ export function ProductPurchase({ product }: { product: ProductDetailDTO }) {
             className="flex w-full items-center justify-between gap-3 px-4 py-3.5 text-left text-sm font-semibold text-ink"
           >
             <span className="flex items-center gap-2.5">
-              <Gift className="h-[18px] w-[18px] text-brand" /> Add a gift message
+              <Gift className="h-[18px] w-[18px] text-brand" /> {t("product.addGiftMessage")}
             </span>
-            <span className="text-xs font-medium text-ink-muted">{gift ? "Added" : "Optional"}</span>
+            <span className="text-xs font-medium text-ink-muted">{gift ? t("product.giftAdded") : t("common.optional")}</span>
           </button>
           <div id={giftId} hidden={!giftOpen} className="border-t border-line px-4 pb-4 pt-3">
             <label htmlFor={`${giftId}-text`} className="sr-only">
-              Gift message
+              {t("product.giftMessage")}
             </label>
             <textarea
               id={`${giftId}-text`}
               value={gift}
               onChange={(e) => setGift(e.target.value.slice(0, 500))}
               rows={3}
-              placeholder="Write a few words for the recipient — we will handwrite them on a card."
+              placeholder={t("product.giftPlaceholder")}
               className="w-full resize-none rounded-xl border border-line bg-ivory px-3 py-2.5 text-[15px] focus:border-brand focus:outline-none focus:ring-4 focus:ring-brand/10"
             />
             <p className="mt-1 text-right text-xs text-ink-muted tabular">{gift.length}/500</p>
@@ -114,13 +116,13 @@ export function ProductPurchase({ product }: { product: ProductDetailDTO }) {
           type="button"
           onClick={() => void toggleFavorite(product.id)}
           aria-pressed={isFav}
-          aria-label={isFav ? "Remove from favourites" : "Add to favourites"}
+          aria-label={isFav ? t("product.removeFavoriteShort") : t("product.addFavoriteShort")}
           className="inline-flex h-13 w-13 items-center justify-center rounded-full border border-line-strong text-ink transition-colors hover:border-brand hover:text-brand"
         >
           <Heart className={cn("h-5 w-5", isFav && "fill-brand text-brand")} />
         </button>
       </div>
-      {inCart > 0 && <p className="mt-3 text-[13px] text-ink-muted">{inCart} already in your bag.</p>}
+      {inCart > 0 && <p className="mt-3 text-[13px] text-ink-muted">{t("product.alreadyInBag", { count: inCart })}</p>}
 
       {/* Mobile sticky purchase bar — only when the main button has scrolled away. */}
       <div
@@ -136,7 +138,7 @@ export function ProductPurchase({ product }: { product: ProductDetailDTO }) {
             <Price amount={product.price} compareAt={product.compareAtPrice} currency={product.currency} size="sm" />
           </div>
           <Button onClick={addToBag} disabled={disabled} tabIndex={showSticky ? 0 : -1} icon={<ShoppingBag className="h-4 w-4" />}>
-            {disabled ? "Unavailable" : "Add"}
+            {disabled ? t("product.unavailableShort") : t("product.add")}
           </Button>
         </div>
       </div>

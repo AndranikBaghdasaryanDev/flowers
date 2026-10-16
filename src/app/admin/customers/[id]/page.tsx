@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import Link from "next/link";
+import { Link } from "@/i18n/client";
 import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { CheckCircle2, Mail, MapPin, Phone, XCircle } from "lucide-react";
@@ -10,12 +10,14 @@ import { hasPermission } from "@/lib/domain/roles";
 import { AdminPageHeader, MobileCards, NoAccess, Panel, StatCard, Table, td, th } from "@/components/admin/ui";
 import { Badge } from "@/components/ui/badge";
 import { statusTone } from "@/components/store/status-tone";
-import { formatMoney } from "@/lib/domain/money";
-import { orderStatusLabel, PAYMENT_STATUS_LABELS } from "@/lib/domain/orders";
-import { formatDateTime } from "@/lib/domain/time";
+import { getAdminI18n } from "@/i18n/server";
+import { paymentStatusLabel, statusLabel } from "@/i18n/labels";
 import { CustomerStatus } from "./customer-status";
 
-export const metadata = { title: "Customer" };
+export async function generateMetadata() {
+  const { t } = await getAdminI18n();
+  return { title: t("admin.customers.customer") };
+}
 
 const DAY: Intl.DateTimeFormatOptions = { day: "numeric", month: "short", year: "numeric" };
 const STAMP: Intl.DateTimeFormatOptions = { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" };
@@ -45,11 +47,12 @@ export default async function AdminCustomerPage({ params }: PageProps<"/admin/cu
   await connection();
   const { id } = await params;
   const { user, allowed } = await requireStaffPage(`/admin/customers/${id}`, "customers:read");
-  if (!allowed) return <NoAccess what="customers" />;
+  const { t, f } = await getAdminI18n();
+  if (!allowed) return <NoAccess what={t("admin.nav.customers")} />;
   const [customer, settings] = await Promise.all([getCustomer(id), loadSettings()]);
   if (!customer || customer.role !== "customer") notFound();
   const tz = settings.timeZone;
-  const money = (v: number) => formatMoney(v, settings.currency);
+  const money = (v: number) => f.money(v, settings.currency);
   const canManage = hasPermission(user.role, "settings:manage");
   const active = customer.status === "active";
 
@@ -57,27 +60,27 @@ export default async function AdminCustomerPage({ params }: PageProps<"/admin/cu
     <div className="space-y-6">
       <AdminPageHeader
         title={customer.name}
-        crumbs={[{ label: "Customers", href: "/admin/customers" }, { label: customer.name }]}
+        crumbs={[{ label: t("admin.nav.customers"), href: "/admin/customers" }, { label: customer.name }]}
         description={
           <span className="flex flex-wrap items-center gap-2">
             <Badge tone={active ? "success" : "danger"} dot>
-              {active ? "Active account" : "Disabled account"}
+              {active ? t("admin.customers.activeAccount") : t("admin.customers.disabledAccount")}
             </Badge>
-            <span>Customer since {formatDateTime(customer.createdAt, tz, DAY)}</span>
+            <span>{t("admin.customers.since", { date: f.dateTime(customer.createdAt, tz, DAY) })}</span>
           </span>
         }
         actions={canManage ? <CustomerStatus id={customer.id} name={customer.name} status={active ? "active" : "disabled"} /> : undefined}
       />
 
       <div className="grid gap-4 sm:grid-cols-3">
-        <StatCard label="Orders" value={customer.orderCount} hint="Excluding cancelled orders" />
-        <StatCard label="Order value" value={money(customer.orderValue)} hint="Excluding cancelled orders" />
-        <StatCard label="Saved addresses" value={customer.addressCount} />
+        <StatCard label={t("admin.nav.orders")} value={f.number(customer.orderCount)} hint={t("admin.customers.excludingCancelled")} />
+        <StatCard label={t("admin.analytics.orderValue")} value={money(customer.orderValue)} hint={t("admin.customers.excludingCancelled")} />
+        <StatCard label={t("admin.customers.savedAddresses")} value={f.number(customer.addressCount)} />
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[1fr_1.6fr]">
         <div className="space-y-6">
-          <Panel title="Contact">
+          <Panel title={t("admin.customers.contact")}>
             <ul className="space-y-3 text-sm">
               <li className="flex min-w-0 items-center gap-3">
                 <Mail className="h-4 w-4 shrink-0 text-ink-muted" aria-hidden="true" />
@@ -92,48 +95,48 @@ export default async function AdminCustomerPage({ params }: PageProps<"/admin/cu
                     {customer.phone}
                   </a>
                 ) : (
-                  <span className="text-ink-muted">No phone number</span>
+                  <span className="text-ink-muted">{t("admin.customers.noPhone")}</span>
                 )}
               </li>
               <li className="flex items-center gap-3">
                 <MapPin className="h-4 w-4 shrink-0 text-ink-muted" aria-hidden="true" />
                 <span className="text-ink-soft">
-                  {customer.addressCount} saved {customer.addressCount === 1 ? "address" : "addresses"}
+                  {t("admin.customers.addressCount", { count: customer.addressCount })}
                 </span>
               </li>
             </ul>
           </Panel>
 
-          <Panel title="Account">
+          <Panel title={t("admin.customers.account")}>
             <dl className="-my-2.5 divide-y divide-line">
-              <Fact label="Joined">{formatDateTime(customer.createdAt, tz, STAMP)}</Fact>
-              <Fact label="Last sign-in">{customer.lastLoginAt ? formatDateTime(customer.lastLoginAt, tz, STAMP) : <span className="text-ink-muted">Never</span>}</Fact>
-              <Fact label="Email">
-                <YesNo value={customer.emailVerified} yes="Verified" no="Not verified" />
+              <Fact label={t("admin.customers.joined")}>{f.dateTime(customer.createdAt, tz, STAMP)}</Fact>
+              <Fact label={t("admin.customers.lastSignIn")}>{customer.lastLoginAt ? f.dateTime(customer.lastLoginAt, tz, STAMP) : <span className="text-ink-muted">{t("admin.customers.never")}</span>}</Fact>
+              <Fact label={t("form.email")}>
+                <YesNo value={customer.emailVerified} yes={t("admin.customers.verified")} no={t("admin.customers.notVerified")} />
               </Fact>
-              <Fact label="Marketing emails">
-                <YesNo value={customer.marketingOptIn} yes="Opted in" no="Not opted in" />
+              <Fact label={t("admin.customers.marketing")}>
+                <YesNo value={customer.marketingOptIn} yes={t("admin.customers.optedIn")} no={t("admin.customers.notOptedIn")} />
               </Fact>
-              <Fact label="Status">
-                <Badge tone={active ? "success" : "danger"}>{active ? "Active" : "Disabled"}</Badge>
+              <Fact label={t("admin.common.status")}>
+                <Badge tone={active ? "success" : "danger"}>{active ? t("admin.customers.active") : t("admin.customers.disabled")}</Badge>
               </Fact>
             </dl>
           </Panel>
         </div>
 
-        <Panel title="Orders" description={customer.orders.length >= 50 ? "Showing the 50 most recent orders" : undefined} padded={false}>
+        <Panel title={t("admin.nav.orders")} description={customer.orders.length >= 50 ? t("admin.customers.recent50") : undefined} padded={false}>
           {customer.orders.length === 0 ? (
-            <p className="px-5 py-12 text-center text-sm text-ink-muted">This customer has not placed any orders yet.</p>
+            <p className="px-5 py-12 text-center text-sm text-ink-muted">{t("admin.customers.noOrders")}</p>
           ) : (
             <>
               <Table className="[&_table]:min-w-[560px]">
                 <thead>
                   <tr>
-                    <th className={th}>Order</th>
-                    <th className={th}>Placed</th>
-                    <th className={th}>Status</th>
-                    <th className={th}>Payment</th>
-                    <th className={`${th} text-right`}>Total</th>
+                    <th className={th}>{t("admin.customers.order")}</th>
+                    <th className={th}>{t("admin.analytics.placed")}</th>
+                    <th className={th}>{t("admin.common.status")}</th>
+                    <th className={th}>{t("admin.customers.payment")}</th>
+                    <th className={`${th} text-right`}>{t("admin.customers.total")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -143,13 +146,13 @@ export default async function AdminCustomerPage({ params }: PageProps<"/admin/cu
                         <Link href={`/admin/orders/${o.id}`} className="font-semibold text-ink group-hover:text-brand">
                           {o.orderNumber}
                         </Link>
-                        <p className="text-xs text-ink-muted">{o.fulfillment === "pickup" ? "Pickup" : "Delivery"}</p>
+                        <p className="text-xs text-ink-muted">{o.fulfillment === "pickup" ? t("admin.analytics.pickup") : t("admin.analytics.delivery")}</p>
                       </td>
-                      <td className={`${td} whitespace-nowrap text-ink-soft`}>{formatDateTime(o.createdAt, tz, STAMP)}</td>
+                      <td className={`${td} whitespace-nowrap text-ink-soft`}>{f.dateTime(o.createdAt, tz, STAMP)}</td>
                       <td className={td}>
-                        <Badge tone={statusTone(o.status)}>{orderStatusLabel(o.status, o.fulfillment)}</Badge>
+                        <Badge tone={statusTone(o.status)}>{statusLabel(t, o.status, o.fulfillment)}</Badge>
                       </td>
-                      <td className={`${td} text-ink-soft`}>{PAYMENT_STATUS_LABELS[o.paymentStatus]}</td>
+                      <td className={`${td} text-ink-soft`}>{paymentStatusLabel(t, o.paymentStatus)}</td>
                       <td className={`${td} text-right font-semibold tabular ${o.status === "cancelled" ? "text-ink-muted line-through" : ""}`}>{money(o.total)}</td>
                     </tr>
                   ))}
@@ -164,9 +167,9 @@ export default async function AdminCustomerPage({ params }: PageProps<"/admin/cu
                         <span className={`font-semibold tabular ${o.status === "cancelled" ? "text-ink-muted line-through" : ""}`}>{money(o.total)}</span>
                       </div>
                       <div className="mt-2 flex flex-wrap items-center gap-2">
-                        <Badge tone={statusTone(o.status)}>{orderStatusLabel(o.status, o.fulfillment)}</Badge>
+                        <Badge tone={statusTone(o.status)}>{statusLabel(t, o.status, o.fulfillment)}</Badge>
                         <span className="text-xs text-ink-muted">
-                          {formatDateTime(o.createdAt, tz, STAMP)} · {PAYMENT_STATUS_LABELS[o.paymentStatus]}
+                          {f.dateTime(o.createdAt, tz, STAMP)} · {paymentStatusLabel(t, o.paymentStatus)}
                         </span>
                       </div>
                     </Link>

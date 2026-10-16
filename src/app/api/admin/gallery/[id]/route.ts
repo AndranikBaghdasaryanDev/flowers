@@ -5,7 +5,7 @@ import { deleteGalleryItem, listGallery, saveGalleryItem } from "@/lib/services/
 export const PUT = route<{ id: string }>(async (req, ctx) => {
   const user = await requirePermission("content:manage");
   const { id } = await ctx.params;
-  assertObjectId(id, "Gallery item");
+  assertObjectId(id, "galleryItem");
   await saveGalleryItem(await readJson(req, galleryInputSchema), user, id);
   return ok(await listGallery(false));
 });
@@ -13,7 +13,7 @@ export const PUT = route<{ id: string }>(async (req, ctx) => {
 export const DELETE = route<{ id: string }>(async (_req, ctx) => {
   const user = await requirePermission("content:manage");
   const { id } = await ctx.params;
-  assertObjectId(id, "Gallery item");
+  assertObjectId(id, "galleryItem");
   await deleteGalleryItem(id, user);
   return ok(await listGallery(false));
 });

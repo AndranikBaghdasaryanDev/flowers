@@ -1,10 +1,11 @@
 import "server-only";
 import mongoose from "mongoose";
 import { connectDb, withTransaction } from "@/lib/db";
-import { Category, Media, Product, type CategoryDoc, type ProductDoc } from "@/lib/models/catalog";
+import { Category, Media, Product, type CategoryDoc, type CategoryText, type ProductDoc } from "@/lib/models/catalog";
+import type { I18nOverrides } from "@/lib/models/_util";
 import { Order } from "@/lib/models/order";
 import { GalleryItem, Settings } from "@/lib/models/content";
-import { ApiError } from "@/lib/api/errors";
+import { ApiError, msg } from "@/lib/api/errors";
 import type { SessionUser } from "@/lib/auth/session";
 import { audit } from "@/lib/services/audit";
 import { deleteMedia, mediaInfoMap } from "@/lib/services/media";
@@ -33,6 +34,8 @@ export type AdminCategoryDTO = {
   primaryProductCount: number;
   isSample: boolean;
   updatedAt: string;
+  /** Stored Armenian / Russian overrides (English is in the base fields). */
+  i18n: I18nOverrides<CategoryText>;
 };
 
 export async function listAdminCategories(q?: string): Promise<AdminCategoryDTO[]> {
@@ -74,6 +77,7 @@ export async function listAdminCategories(q?: string): Promise<AdminCategoryDTO[
       primaryProductCount: p.get(String(c._id)) ?? 0,
       isSample: Boolean(c.isSample),
       updatedAt: new Date((c as { updatedAt?: Date }).updatedAt ?? Date.now()).toISOString(),
+      i18n: c.i18n ?? {},
     };
   });
 }
@@ -82,14 +86,14 @@ async function assertSlugFree(model: "category" | "product", slug: string, excep
   const filter: Record<string, unknown> = { slug };
   if (exceptId) filter._id = { $ne: exceptId };
   const exists = model === "category" ? await Category.exists(filter) : await Product.exists(filter);
-  if (exists) throw ApiError.validation("This slug is already used. Choose another.", { slug: "This slug is already used." });
+  if (exists) throw ApiError.validation("server.errors.slugTaken", { slug: "server.errors.slugTakenField" });
 }
 
 async function assertMediaExists(ids: (string | null | undefined)[]) {
   const wanted = [...new Set(ids.filter((x): x is string => Boolean(x)))];
   if (wanted.length === 0) return;
   const count = await Media.countDocuments({ _id: { $in: wanted } });
-  if (count !== wanted.length) throw ApiError.validation("One of the selected images no longer exists. Please upload it again.");
+  if (count !== wanted.length) throw ApiError.validation("server.errors.imageMissing");
 }
 
 export async function createCategory(input: CategoryInput, user: SessionUser) {
@@ -104,7 +108,7 @@ export async function createCategory(input: CategoryInput, user: SessionUser) {
 export async function updateCategory(id: string, input: CategoryInput, user: SessionUser) {
   await connectDb();
   const existing = await Category.findById(id).lean();
-  if (!existing) throw ApiError.notFound("Category not found.");
+  if (!existing) throw ApiError.notFound("server.notFound.category");
   await assertSlugFree("category", input.slug, id);
   await assertMediaExists([input.image]);
   if (existing.kind !== input.kind) {
@@ -112,7 +116,7 @@ export async function updateCategory(id: string, input: CategoryInput, user: Ses
       existing.kind === "collection"
         ? await Product.exists({ category: id, archivedAt: null })
         : await Product.exists({ occasions: id, archivedAt: null });
-    if (used) throw ApiError.conflict("This category has products assigned. Reassign them before changing its type.");
+    if (used) throw ApiError.conflict("server.errors.categoryKindInUse");
   }
   await Category.updateOne({ _id: id }, { $set: { ...input, isSample: false } });
   await audit({ actor: user, action: "category.update", entityType: "category", entityId: id, summary: `Updated category “${input.name}”` });
@@ -126,18 +130,18 @@ export async function updateCategory(id: string, input: CategoryInput, user: Ses
 export async function deleteCategory(id: string, reassignTo: string | null, user: SessionUser) {
   await connectDb();
   const cat = await Category.findById(id).lean();
-  if (!cat) throw ApiError.notFound("Category not found.");
+  if (!cat) throw ApiError.notFound("server.notFound.category");
   const primaryCount = await Product.countDocuments({ category: id });
   if (primaryCount > 0) {
     if (!reassignTo) {
       throw ApiError.conflict(
-        `${primaryCount} product${primaryCount === 1 ? " uses" : "s use"} this as their main category. Choose a category to move them to first.`,
+        msg("server.errors.categoryHasProducts", { count: primaryCount }),
         { reason: "has_products", count: primaryCount },
       );
     }
-    if (reassignTo === id) throw ApiError.validation("Choose a different category.");
+    if (reassignTo === id) throw ApiError.validation("server.errors.chooseDifferentCategory");
     const target = await Category.findOne({ _id: reassignTo, kind: "collection" }).lean();
-    if (!target) throw ApiError.validation("The target category does not exist or is not a collection.");
+    if (!target) throw ApiError.validation("server.errors.targetCategoryInvalid");
   }
   await withTransaction(async (session) => {
     if (primaryCount > 0) await Product.updateMany({ category: id }, { $set: { category: reassignTo } }, { session });
@@ -293,6 +297,7 @@ export async function getAdminProduct(id: string): Promise<AdminProductForm | nu
     seoDescription: p.seoDescription ?? "",
     isArchived: Boolean(p.archivedAt),
     isSample: Boolean(p.isSample),
+    i18n: p.i18n ?? {},
   };
 }
 
@@ -300,11 +305,11 @@ async function productPayload(input: ProductInput) {
   const settings = await loadSettings();
   const category = await Category.findById(input.category).lean();
   if (!category || category.kind !== "collection") {
-    throw ApiError.validation("Choose a main category.", { category: "Choose a collection category." });
+    throw ApiError.validation("server.errors.chooseMainCategory", { category: "server.errors.chooseCollectionCategory" });
   }
   if (input.occasions.length) {
     const n = await Category.countDocuments({ _id: { $in: input.occasions }, kind: "occasion" });
-    if (n !== new Set(input.occasions).size) throw ApiError.validation("One of the occasions no longer exists.", { occasions: "Invalid occasion." });
+    if (n !== new Set(input.occasions).size) throw ApiError.validation("server.errors.occasionMissing", { occasions: "server.errors.invalidOccasion" });
   }
   await assertMediaExists(input.images.map((i) => i.media));
   return {
@@ -329,7 +334,7 @@ export async function createProduct(input: ProductInput, user: SessionUser) {
 export async function updateProduct(id: string, input: ProductInput, user: SessionUser) {
   await connectDb();
   const existing = await Product.findById(id).lean<ProductDoc>();
-  if (!existing) throw ApiError.notFound("Product not found.");
+  if (!existing) throw ApiError.notFound("server.notFound.product");
   await assertSlugFree("product", input.slug, id);
   const payload = await productPayload(input);
   await Product.updateOne({ _id: id }, { $set: { ...payload, isSample: false } });
@@ -353,14 +358,14 @@ export async function patchProduct(
 ) {
   await connectDb();
   const existing = await Product.findById(id).lean<ProductDoc>();
-  if (!existing || existing.archivedAt) throw ApiError.notFound("Product not found.");
-  if (patch.isActive && existing.images.length === 0) throw ApiError.validation("Add at least one image before publishing.");
+  if (!existing || existing.archivedAt) throw ApiError.notFound("server.notFound.product");
+  if (patch.isActive && existing.images.length === 0) throw ApiError.validation("server.errors.addImageBeforePublishing");
   const set: Record<string, unknown> = {};
   if (patch.isActive !== undefined) set.isActive = patch.isActive;
   if (patch.isFeatured !== undefined) set.isFeatured = patch.isFeatured;
   if (patch.availability) set.availability = patch.availability;
   if (patch.stockQuantity !== undefined) {
-    if (!existing.trackInventory) throw ApiError.validation("Inventory tracking is off for this product.");
+    if (!existing.trackInventory) throw ApiError.validation("server.errors.inventoryOff");
     set.stockQuantity = patch.stockQuantity;
   }
   await Product.updateOne({ _id: id }, { $set: set });
@@ -374,7 +379,7 @@ export async function patchProduct(
 export async function deleteProduct(id: string, user: SessionUser): Promise<"archived" | "deleted"> {
   await connectDb();
   const product = await Product.findById(id).lean<ProductDoc>();
-  if (!product) throw ApiError.notFound("Product not found.");
+  if (!product) throw ApiError.notFound("server.notFound.product");
   const inOrders = await Order.exists({ "items.product": product._id });
   if (inOrders) {
     await Product.updateOne({ _id: id }, { $set: { archivedAt: new Date(), isActive: false, isFeatured: false } });
@@ -390,7 +395,7 @@ export async function deleteProduct(id: string, user: SessionUser): Promise<"arc
 export async function restoreProduct(id: string, user: SessionUser) {
   await connectDb();
   const product = await Product.findOneAndUpdate({ _id: id, archivedAt: { $ne: null } }, { $set: { archivedAt: null, isActive: false } }).lean();
-  if (!product) throw ApiError.notFound("Archived product not found.");
+  if (!product) throw ApiError.notFound("server.notFound.archivedProduct");
   await audit({ actor: user, action: "product.restore", entityType: "product", entityId: id, summary: `Restored “${product.name}” as inactive` });
 }
 

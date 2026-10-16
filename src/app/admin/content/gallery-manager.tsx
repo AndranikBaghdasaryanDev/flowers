@@ -14,6 +14,9 @@ import { useToast } from "@/components/ui/toast";
 import { api, errorMessage, fieldErrors } from "@/lib/client/api";
 import { cn } from "@/lib/cn";
 import type { GalleryItemDTO } from "@/lib/services/admin";
+import type { I18nOverrides } from "@/lib/models/_util";
+import { TranslationTabs, translationFields } from "@/components/admin/translation-tabs";
+import { useT } from "@/i18n/client";
 
 type Draft = {
   image: { id: string; src: string } | null;
@@ -22,9 +25,12 @@ type Draft = {
   link: string;
   sortOrder: string;
   isActive: boolean;
+  i18n: I18nOverrides<GalleryText>;
 };
 
-const emptyDraft = (sortOrder: number): Draft => ({ image: null, alt: "", caption: "", link: "", sortOrder: String(sortOrder), isActive: true });
+type GalleryText = { alt: string; caption: string };
+
+const emptyDraft = (sortOrder: number): Draft => ({ image: null, alt: "", caption: "", link: "", sortOrder: String(sortOrder), isActive: true, i18n: {} });
 
 const toBody = (d: { imageId: string; alt: string; caption: string; link: string; sortOrder: number; isActive: boolean }) => ({
   image: d.imageId,
@@ -36,6 +42,7 @@ const toBody = (d: { imageId: string; alt: string; caption: string; link: string
 });
 
 export function GalleryManager({ initial }: { initial: GalleryItemDTO[] }) {
+  const t = useT();
   const router = useRouter();
   const toast = useToast();
   const [items, setItems] = useState(initial);
@@ -50,10 +57,10 @@ export function GalleryManager({ initial }: { initial: GalleryItemDTO[] }) {
     setToggling(item.id);
     try {
       setItems(await api<GalleryItemDTO[]>(`/api/admin/gallery/${item.id}`, { method: "PUT", body: { ...toBody(item), isActive: !item.isActive } }));
-      toast.success(item.isActive ? "Image hidden from the gallery" : "Image shown in the gallery");
+      toast.success(item.isActive ? t("admin.gallery.hiddenToast") : t("admin.gallery.shownToast"));
       router.refresh();
     } catch (e) {
-      toast.error("Gallery not updated", errorMessage(e));
+      toast.error(t("admin.gallery.notUpdated"), errorMessage(e));
     } finally {
       setToggling(null);
     }
@@ -65,10 +72,10 @@ export function GalleryManager({ initial }: { initial: GalleryItemDTO[] }) {
     try {
       setItems(await api<GalleryItemDTO[]>(`/api/admin/gallery/${deleting.id}`, { method: "DELETE" }));
       setDeleting(null);
-      toast.success("Image deleted");
+      toast.success(t("admin.gallery.deleted"));
       router.refresh();
     } catch (e) {
-      toast.error("Image not deleted", errorMessage(e));
+      toast.error(t("admin.gallery.notDeleted"), errorMessage(e));
     } finally {
       setDeleteBusy(false);
     }
@@ -76,20 +83,20 @@ export function GalleryManager({ initial }: { initial: GalleryItemDTO[] }) {
 
   return (
     <Panel
-      title="Gallery"
-      description={`${items.length} ${items.length === 1 ? "image" : "images"} · ${activeCount} shown on the storefront (up to 12 visible, lowest sort order first)`}
+      title={t("admin.gallery.title")}
+      description={`${t("admin.gallery.imageCount", { count: items.length })} · ${t("admin.gallery.shownCount", { count: activeCount })}`}
       actions={
         <Button size="sm" icon={<Plus className="h-4 w-4" />} onClick={() => setEditing("new")}>
-          Add image
+          {t("admin.gallery.add")}
         </Button>
       }
       padded={false}
     >
       {items.length === 0 ? (
         <div className="px-5 py-14 text-center">
-          <p className="text-sm text-ink-muted">No gallery images yet.</p>
+          <p className="text-sm text-ink-muted">{t("admin.gallery.empty")}</p>
           <Button size="sm" variant="soft" className="mt-4" icon={<Plus className="h-4 w-4" />} onClick={() => setEditing("new")}>
-            Add the first image
+            {t("admin.gallery.addFirst")}
           </Button>
         </div>
       ) : (
@@ -101,22 +108,22 @@ export function GalleryManager({ initial }: { initial: GalleryItemDTO[] }) {
                   <Image src={item.image.src} alt={item.alt} fill sizes="(min-width: 1280px) 30vw, (min-width: 640px) 45vw, 100vw" className="object-cover" />
                 ) : (
                   <span className="flex h-full items-center justify-center text-ink-muted">
-                    <ImageOff className="h-6 w-6" aria-label="Image missing" />
+                    <ImageOff className="h-6 w-6" aria-label={t("admin.gallery.missing")} />
                   </span>
                 )}
                 <div className="absolute left-3 top-3 flex flex-wrap gap-1.5">
-                  {item.isActive ? <Badge tone="success">Shown</Badge> : <Badge tone="neutral">Hidden</Badge>}
-                  {item.isSample && <Badge tone="warning">Sample</Badge>}
+                  {item.isActive ? <Badge tone="success">{t("admin.gallery.shown")}</Badge> : <Badge tone="neutral">{t("admin.common.hidden")}</Badge>}
+                  {item.isSample && <Badge tone="warning">{t("admin.common.sample")}</Badge>}
                 </div>
               </div>
               <div className="flex flex-1 flex-col gap-2 p-4">
-                <p className="text-sm font-medium text-ink">{item.caption || <span className="text-ink-muted">No caption</span>}</p>
+                <p className="text-sm font-medium text-ink">{item.caption || <span className="text-ink-muted">{t("admin.gallery.noCaption")}</span>}</p>
                 <p className="text-[13px] text-ink-soft">
-                  <span className="font-semibold text-ink-muted">Alt: </span>
+                  <span className="font-semibold text-ink-muted">{t("admin.gallery.altPrefix")} </span>
                   {item.alt}
                 </p>
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-muted">
-                  <span className="tabular">Sort order {item.sortOrder}</span>
+                  <span className="tabular">{t("admin.gallery.sortOrderN", { n: item.sortOrder })}</span>
                   {item.link && (
                     <a href={item.link} target="_blank" rel="noreferrer" className="inline-flex max-w-full items-center gap-1 truncate text-brand hover:underline">
                       <Link2 className="h-3 w-3 shrink-0" aria-hidden="true" />
@@ -125,7 +132,7 @@ export function GalleryManager({ initial }: { initial: GalleryItemDTO[] }) {
                   )}
                 </div>
                 {item.isSample && (
-                  <p className="text-xs text-warning">Placeholder image from the demo setup. Replace it with your own photo or delete it.</p>
+                  <p className="text-xs text-warning">{t("admin.gallery.sampleNote")}</p>
                 )}
                 <div className="mt-auto flex flex-wrap items-center gap-2 border-t border-line pt-3">
                   <Checkbox
@@ -133,11 +140,11 @@ export function GalleryManager({ initial }: { initial: GalleryItemDTO[] }) {
                     checked={item.isActive}
                     disabled={toggling === item.id}
                     onChange={() => toggleActive(item)}
-                    label="Show on site"
+                    label={t("admin.gallery.showOnSite")}
                     className="mr-auto text-[13px]"
                   />
-                  <Button size="sm" variant="ghost" icon={<Pencil className="h-3.5 w-3.5" />} onClick={() => setEditing(item)} aria-label={`Edit image: ${item.alt}`}>
-                    Edit
+                  <Button size="sm" variant="ghost" icon={<Pencil className="h-3.5 w-3.5" />} onClick={() => setEditing(item)} aria-label={t("admin.gallery.editAria", { alt: item.alt })}>
+                    {t("admin.common.edit")}
                   </Button>
                   <Button
                     size="sm"
@@ -145,9 +152,9 @@ export function GalleryManager({ initial }: { initial: GalleryItemDTO[] }) {
                     className="hover:!bg-danger-50 hover:!text-danger"
                     icon={<Trash2 className="h-3.5 w-3.5" />}
                     onClick={() => setDeleting(item)}
-                    aria-label={`Delete image: ${item.alt}`}
+                    aria-label={t("admin.gallery.deleteAria", { alt: item.alt })}
                   >
-                    Delete
+                    {t("admin.common.delete")}
                   </Button>
                 </div>
               </div>
@@ -164,7 +171,7 @@ export function GalleryManager({ initial }: { initial: GalleryItemDTO[] }) {
           onSaved={(list, isNew) => {
             setItems(list);
             setEditing(null);
-            toast.success(isNew ? "Image added to the gallery" : "Gallery image saved");
+            toast.success(isNew ? t("admin.gallery.added") : t("admin.gallery.saved"));
             router.refresh();
           }}
         />
@@ -177,9 +184,9 @@ export function GalleryManager({ initial }: { initial: GalleryItemDTO[] }) {
           onClose={() => setDeleting(null)}
           onConfirm={remove}
           loading={deleteBusy}
-          title="Delete this image?"
-          confirmLabel="Delete image"
-          description="The image is removed from the gallery and its file is deleted. This cannot be undone."
+          title={t("admin.gallery.deleteTitle")}
+          confirmLabel={t("admin.gallery.deleteConfirm")}
+          description={t("admin.gallery.deleteText")}
         >
           {deleting.image && (
             <div className="relative mt-4 aspect-[4/3] w-full overflow-hidden rounded-xl bg-cream">
@@ -203,6 +210,7 @@ function GalleryItemDialog({
   onClose: () => void;
   onSaved: (items: GalleryItemDTO[], isNew: boolean) => void;
 }) {
+  const t = useT();
   const [draft, setDraft] = useState<Draft>(() =>
     item
       ? {
@@ -213,6 +221,7 @@ function GalleryItemDialog({
           link: item.link,
           sortOrder: String(item.sortOrder),
           isActive: item.isActive,
+          i18n: item.i18n ?? {},
         }
       : emptyDraft(nextSortOrder),
   );
@@ -229,23 +238,28 @@ function GalleryItemDialog({
     });
   };
 
+  const translated = translationFields(draft.i18n, (fn) => setDraft((d) => ({ ...d, i18n: fn(d.i18n) })), [
+    { key: "alt", label: t("admin.gallery.alt"), base: draft.alt, maxLength: 200 },
+    { key: "caption", label: t("admin.gallery.caption"), base: draft.caption, maxLength: 200 },
+  ]);
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     const local: Record<string, string> = {};
-    if (!draft.image) local.image = "Upload an image.";
-    if (draft.alt.trim().length < 3) local.alt = "Describe the image (at least 3 characters).";
+    if (!draft.image) local.image = t("admin.gallery.errImage");
+    if (draft.alt.trim().length < 3) local.alt = t("admin.gallery.errAlt");
     const sort = Number(draft.sortOrder);
-    if (!Number.isInteger(sort) || sort < -1000 || sort > 1000) local.sortOrder = "Use a whole number between -1000 and 1000.";
+    if (!Number.isInteger(sort) || sort < -1000 || sort > 1000) local.sortOrder = t("admin.gallery.errSort");
     if (Object.keys(local).length) {
       setFields(local);
-      setError("Please fix the highlighted fields.");
+      setError(t("admin.common.fixFields"));
       return;
     }
     setBusy(true);
     setError(null);
     setFields({});
     try {
-      const body = { image: draft.image!.id, alt: draft.alt, caption: draft.caption, link: draft.link.trim(), sortOrder: sort, isActive: draft.isActive };
+      const body = { image: draft.image!.id, alt: draft.alt, caption: draft.caption, link: draft.link.trim(), sortOrder: sort, isActive: draft.isActive, i18n: draft.i18n };
       const list = item
         ? await api<GalleryItemDTO[]>(`/api/admin/gallery/${item.id}`, { method: "PUT", body })
         : await api<GalleryItemDTO[]>("/api/admin/gallery", { method: "POST", body });
@@ -263,44 +277,46 @@ function GalleryItemDialog({
       open
       onClose={onClose}
       size="lg"
-      title={item ? "Edit gallery image" : "Add gallery image"}
-      description={item?.isSample ? "This is a sample image. Saving it marks it as your own." : undefined}
+      title={item ? t("admin.gallery.editTitle") : t("admin.gallery.addTitle")}
+      description={item?.isSample ? t("admin.gallery.sampleSave") : undefined}
       footer={
         <div className="flex justify-end gap-2">
-          <Button variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button variant="ghost" onClick={onClose}>{t("common.cancel")}</Button>
           <Button type="submit" form="gallery-item-form" loading={busy}>
-            {item ? "Save image" : "Add image"}
+            {item ? t("admin.gallery.save") : t("admin.gallery.add")}
           </Button>
         </div>
       }
     >
       <form id="gallery-item-form" onSubmit={submit} noValidate className="space-y-4">
         <FormError message={error} />
-        <div className="grid gap-5 sm:grid-cols-[1fr_1.1fr]">
-          <ImagePicker
-            label="Image"
-            purpose="gallery"
-            alt={draft.alt}
-            value={draft.image}
-            onChange={(v) => set("image", v ? { id: v.id, src: v.src } : null)}
-            error={fields.image}
-          />
-          <div className="min-w-0 space-y-4">
-            <Field id="gal-alt" label="Image description (alt text)" required error={fields.alt} hint="What the photo shows, for screen readers and search engines.">
-              <Input id="gal-alt" value={draft.alt} maxLength={200} invalid={!!fields.alt} onChange={(e) => set("alt", e.target.value)} aria-describedby={fields.alt ? "gal-alt-error" : "gal-alt-hint"} />
-            </Field>
-            <Field id="gal-caption" label="Caption" optional error={fields.caption}>
-              <Input id="gal-caption" value={draft.caption} maxLength={200} invalid={!!fields.caption} onChange={(e) => set("caption", e.target.value)} />
-            </Field>
-            <Field id="gal-link" label="Link" optional error={fields.link} hint="A full URL starting with https://, e.g. an Instagram post.">
-              <Input id="gal-link" type="url" inputMode="url" value={draft.link} maxLength={300} placeholder="https://" invalid={!!fields.link} onChange={(e) => set("link", e.target.value)} aria-describedby={fields.link ? "gal-link-error" : "gal-link-hint"} />
-            </Field>
-            <Field id="gal-sort" label="Sort order" error={fields.sortOrder} hint="Lower numbers appear first.">
-              <Input id="gal-sort" type="number" inputMode="numeric" min={-1000} max={1000} step={1} value={draft.sortOrder} invalid={!!fields.sortOrder} onChange={(e) => set("sortOrder", e.target.value)} aria-describedby={fields.sortOrder ? "gal-sort-error" : "gal-sort-hint"} />
-            </Field>
-            <Checkbox id="gal-active" checked={draft.isActive} onChange={(e) => set("isActive", e.target.checked)} label="Show on the storefront" />
+        <TranslationTabs fields={translated} errors={fields}>
+          <div className="grid gap-5 sm:grid-cols-[1fr_1.1fr]">
+            <ImagePicker
+              label={t("admin.common.image")}
+              purpose="gallery"
+              alt={draft.alt}
+              value={draft.image}
+              onChange={(v) => set("image", v ? { id: v.id, src: v.src } : null)}
+              error={fields.image}
+            />
+            <div className="min-w-0 space-y-4">
+              <Field id="gal-alt" label={t("admin.gallery.alt")} required error={fields.alt} hint={t("admin.gallery.altHint")}>
+                <Input id="gal-alt" value={draft.alt} maxLength={200} invalid={!!fields.alt} onChange={(e) => set("alt", e.target.value)} aria-describedby={fields.alt ? "gal-alt-error" : "gal-alt-hint"} />
+              </Field>
+              <Field id="gal-caption" label={t("admin.gallery.caption")} optional error={fields.caption}>
+                <Input id="gal-caption" value={draft.caption} maxLength={200} invalid={!!fields.caption} onChange={(e) => set("caption", e.target.value)} />
+              </Field>
+              <Field id="gal-link" label={t("admin.gallery.link")} optional error={fields.link} hint={t("admin.gallery.linkHint")}>
+                <Input id="gal-link" type="url" inputMode="url" value={draft.link} maxLength={300} placeholder="https://" invalid={!!fields.link} onChange={(e) => set("link", e.target.value)} aria-describedby={fields.link ? "gal-link-error" : "gal-link-hint"} />
+              </Field>
+              <Field id="gal-sort" label={t("admin.gallery.sortOrder")} error={fields.sortOrder} hint={t("admin.common.displayOrderHint")}>
+                <Input id="gal-sort" type="number" inputMode="numeric" min={-1000} max={1000} step={1} value={draft.sortOrder} invalid={!!fields.sortOrder} onChange={(e) => set("sortOrder", e.target.value)} aria-describedby={fields.sortOrder ? "gal-sort-error" : "gal-sort-hint"} />
+              </Field>
+              <Checkbox id="gal-active" checked={draft.isActive} onChange={(e) => set("isActive", e.target.checked)} label={t("admin.gallery.showOnStorefront")} />
+            </div>
           </div>
-        </div>
+        </TranslationTabs>
       </form>
     </Modal>
   );

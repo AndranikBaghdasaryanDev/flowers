@@ -7,7 +7,8 @@ import { isPurchasable, maxQuantityFor } from "@/lib/services/catalog";
 import { computeDeliveryFee } from "@/lib/services/delivery";
 import type { StoreSettings } from "@/lib/services/settings";
 import type { DeliveryMethodDTO, QuoteDTO, QuoteLineDTO } from "@/lib/types";
-import { formatMoney } from "@/lib/domain/money";
+import { msg, renderText, type Msg, type TextTranslator } from "@/lib/api/errors";
+import { overridesFor, pickAt, pickText } from "@/lib/localize";
 
 export type CartLine = { productId: string; quantity: number };
 
@@ -20,16 +21,24 @@ export function normaliseLines(lines: CartLine[]): CartLine[] {
 
 export type PricedLine = QuoteLineDTO & { doc: ProductDoc | null };
 
+/** Untranslated quote messages, for callers that raise them as API errors. */
+export type QuoteNotes = { delivery: Msg | null; issues: Msg[] };
+
 /**
  * Prices a cart entirely from database values. Client-submitted prices,
  * discounts and totals are never accepted.
+ *
+ * With `t`, product names and messages in the result are in the translator's language;
+ * without it, names are the English base names and messages are dictionary keys.
  */
 export async function priceCart(
   lines: CartLine[],
   settings: StoreSettings,
-  opts: { method?: DeliveryMethodDTO | null; zone?: string; session?: mongoose.ClientSession } = {},
-): Promise<QuoteDTO & { priced: PricedLine[] }> {
+  opts: { method?: DeliveryMethodDTO | null; zone?: string; session?: mongoose.ClientSession; t?: TextTranslator } = {},
+): Promise<QuoteDTO & { priced: PricedLine[]; notes: QuoteNotes }> {
   await connectDb();
+  const locale = opts.t?.locale;
+  const render = (m: Msg | null) => (m ? (opts.t ? renderText(opts.t, m) : m.key) : "");
   const normalised = normaliseLines(lines).filter((l) => mongoose.isValidObjectId(l.productId));
   const ids = normalised.map((l) => new mongoose.Types.ObjectId(l.productId));
   const query = Product.find({ _id: { $in: ids } });
@@ -44,10 +53,11 @@ export async function priceCart(
   const priced: PricedLine[] = normalised.map((line) => {
     const doc = byId.get(line.productId) ?? null;
     if (!doc || doc.archivedAt) {
+      const tr = overridesFor(doc?.i18n, locale);
       return {
         productId: line.productId,
         slug: doc?.slug ?? "",
-        name: doc?.name ?? "Product no longer available",
+        name: doc ? pickText(tr.name, doc.name) : render(msg("server.pricing.productGone")),
         image: null,
         unitPrice: 0,
         compareAtPrice: null,
@@ -56,13 +66,15 @@ export async function priceCart(
         lineTotal: 0,
         maxQuantity: 0,
         status: "not_found",
-        message: "This product is no longer available and was removed from your order.",
+        message: render(msg("server.pricing.lineRemoved")),
         doc,
       };
     }
+    const tr = overridesFor(doc.i18n, locale);
+    const name = pickText(tr.name, doc.name);
     const img = doc.images[0];
     const info = img ? media.get(String(img.media)) : undefined;
-    const image = info ? { src: info.url, alt: img.alt || doc.name, width: info.width, height: info.height } : null;
+    const image = info ? { src: info.url, alt: pickAt(tr.imageAlts, 0, img.alt) || name, width: info.width, height: info.height } : null;
     const purchasable = isPurchasable(doc, activeCats.has(String(doc.category)));
     const max = purchasable ? maxQuantityFor(doc, settings) : 0;
     const quantity = Math.min(line.quantity, max);
@@ -70,7 +82,7 @@ export async function priceCart(
     return {
       productId: line.productId,
       slug: doc.slug,
-      name: doc.name,
+      name,
       image,
       unitPrice: doc.price,
       compareAtPrice: doc.compareAtPrice && doc.compareAtPrice > doc.price ? doc.compareAtPrice : null,
@@ -81,9 +93,9 @@ export async function priceCart(
       status,
       message:
         status === "unavailable"
-          ? "This product is currently unavailable."
+          ? render(msg("server.pricing.lineUnavailable"))
           : status === "quantity_reduced"
-            ? `Only ${max} can be ordered right now.`
+            ? render(msg("server.pricing.lineReduced", { max }))
             : "",
       doc,
     };
@@ -91,19 +103,23 @@ export async function priceCart(
 
   const subtotal = priced.reduce((sum, l) => sum + l.lineTotal, 0);
   const itemCount = priced.reduce((sum, l) => sum + l.quantity, 0);
-  const issues: string[] = [];
+  const issues: Msg[] = [];
   let deliveryFee: number | null = null;
-  let deliveryMessage = "";
+  let delivery: Msg | null = null;
   const method = opts.method ?? null;
   if (method) {
     deliveryFee = computeDeliveryFee(method, subtotal, opts.zone);
     if (deliveryFee === null) {
-      deliveryMessage = method.zones.length > 0 && !opts.zone ? "Choose a delivery area to see the delivery fee." : "We do not deliver to this area yet.";
+      delivery = msg(method.zones.length > 0 && !opts.zone ? "server.pricing.chooseZone" : "server.pricing.zoneNotCovered");
     } else if (method.freeOverAmount !== null && subtotal < method.freeOverAmount && deliveryFee > 0) {
-      deliveryMessage = `Free ${method.type === "pickup" ? "pickup" : "delivery"} on orders from ${formatMoney(method.freeOverAmount, settings.currency)}.`;
+      delivery = msg(method.type === "pickup" ? "server.pricing.freePickup" : "server.pricing.freeDelivery", {
+        amount: { money: method.freeOverAmount, currency: settings.currency },
+      });
     }
     if (method.minOrderAmount > 0 && subtotal < method.minOrderAmount) {
-      issues.push(`The minimum order for ${method.name} is ${formatMoney(method.minOrderAmount, settings.currency)}.`);
+      issues.push(
+        msg("server.pricing.minimumOrder", { method: method.name, amount: { money: method.minOrderAmount, currency: settings.currency } }),
+      );
     }
   }
   const discountTotal = 0;
@@ -111,12 +127,13 @@ export async function priceCart(
     currency: settings.currency,
     lines: priced.map(({ doc, ...rest }) => rest),
     priced,
+    notes: { delivery, issues },
     itemCount,
     subtotal,
     deliveryFee,
     discountTotal,
     total: subtotal - discountTotal + (deliveryFee ?? 0),
-    deliveryMessage,
-    issues,
+    deliveryMessage: render(delivery),
+    issues: issues.map(render),
   };
 }

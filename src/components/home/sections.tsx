@@ -1,12 +1,13 @@
 import Image from "next/image";
-import Link from "next/link";
+import { Link } from "@/i18n/client";
 import { ArrowRight, ArrowUpRight, Star, Truck, Store, Clock, Hand, Gift, Leaf } from "lucide-react";
 import { InstagramIcon } from "@/components/ui/social-icons";
 import { Reveal } from "@/components/ui/reveal";
 import { LinkButton } from "@/components/ui/button";
 import { ProductGrid } from "@/components/store/product-grid";
 import { ImageFallback } from "@/components/store/image-fallback";
-import { formatMoney, type CurrencyCode } from "@/lib/domain/money";
+import type { CurrencyCode } from "@/lib/domain/money";
+import { getStoreI18n } from "@/i18n/server";
 import { brand } from "@/lib/brand";
 import type { CategoryDTO, DeliveryMethodDTO, ProductCardDTO } from "@/lib/types";
 import type { StoreSettings } from "@/lib/services/settings";
@@ -38,19 +39,20 @@ export function SectionHeading({
   );
 }
 
-export function CategoryShowcase({ categories }: { categories: CategoryDTO[] }) {
+export async function CategoryShowcase({ categories }: { categories: CategoryDTO[] }) {
   if (categories.length === 0) return null;
+  const { t } = await getStoreI18n();
   return (
     <section className="py-16 lg:py-24" aria-labelledby="collections-heading">
       <div className="container-page">
         <Reveal>
           <div id="collections-heading">
             <SectionHeading
-              eyebrow="Collections"
-              title="Find the flowers that fit the feeling"
+              eyebrow={t("home.collectionsEyebrow")}
+              title={t("home.collectionsTitle")}
               action={
                 <Link href="/categories" className="inline-flex items-center gap-2 text-sm font-semibold text-brand hover:underline">
-                  All collections <ArrowRight className="h-4 w-4" />
+                  {t("nav.allCollections")} <ArrowRight className="h-4 w-4" />
                 </Link>
               }
             />
@@ -77,7 +79,7 @@ export function CategoryShowcase({ categories }: { categories: CategoryDTO[] }) 
                   <div className="mt-3 text-center">
                     <h3 className="font-display text-xl text-ink transition-colors group-hover:text-brand">{c.name}</h3>
                     <p className="text-[12.5px] text-ink-muted">
-                      {c.productCount} {c.productCount === 1 ? "piece" : "pieces"}
+                      {t("shop.pieces", { count: c.productCount })}
                     </p>
                   </div>
                 </Link>
@@ -90,20 +92,21 @@ export function CategoryShowcase({ categories }: { categories: CategoryDTO[] }) 
   );
 }
 
-export function FeaturedProducts({ products }: { products: ProductCardDTO[] }) {
+export async function FeaturedProducts({ products }: { products: ProductCardDTO[] }) {
   if (products.length === 0) return null;
+  const { t } = await getStoreI18n();
   return (
     <section className="bg-paper py-16 lg:py-24" aria-labelledby="featured-heading">
       <div className="container-page">
         <Reveal>
           <div id="featured-heading">
             <SectionHeading
-              eyebrow="Curated for you"
-              title="Featured compositions"
-              description="A selection of bouquets and arrangements chosen by our florists."
+              eyebrow={t("home.featuredEyebrow")}
+              title={t("home.featuredTitle")}
+              description={t("home.featuredText")}
               action={
                 <LinkButton href="/shop" variant="outline" icon={<ArrowRight className="h-4 w-4" />}>
-                  Shop all
+                  {t("home.shopAll")}
                 </LinkButton>
               }
             />
@@ -115,7 +118,8 @@ export function FeaturedProducts({ products }: { products: ProductCardDTO[] }) {
   );
 }
 
-export function BrandStory({ content }: { content: StoreSettings["content"] }) {
+export async function BrandStory({ content }: { content: StoreSettings["content"] }) {
+  const { t } = await getStoreI18n();
   const paragraphs = content.storyBody.split(/\n{2,}/).filter(Boolean);
   return (
     <section className="py-16 lg:py-28" aria-labelledby="story-heading">
@@ -131,7 +135,7 @@ export function BrandStory({ content }: { content: StoreSettings["content"] }) {
           <div aria-hidden="true" className="absolute -bottom-6 -right-4 hidden h-40 w-40 rounded-full bg-brand-100/70 lg:block" />
         </Reveal>
         <Reveal className="order-1 lg:order-2" delay={100}>
-          <p className="eyebrow">Our craft</p>
+          <p className="eyebrow">{t("home.craftEyebrow")}</p>
           <h2 id="story-heading" className="mt-3 font-display text-[2.3rem] leading-[1.08] text-ink sm:text-5xl">
             {content.storyTitle}
           </h2>
@@ -142,9 +146,9 @@ export function BrandStory({ content }: { content: StoreSettings["content"] }) {
           </div>
           <ul className="mt-9 grid gap-5 sm:grid-cols-3">
             {[
-              { icon: Hand, title: "Composed by hand", text: "Every piece is arranged individually." },
-              { icon: Gift, title: "Wrapped with care", text: "Finished to be given and remembered." },
-              { icon: Leaf, title: "Natural beauty", text: "Each stem chosen for colour and form." },
+              { icon: Hand, title: t("home.value1Title"), text: t("home.value1Text") },
+              { icon: Gift, title: t("home.value2Title"), text: t("home.value2Text") },
+              { icon: Leaf, title: t("home.value3Title"), text: t("home.value3Text") },
             ].map(({ icon: Icon, title, text }) => (
               <li key={title}>
                 <Icon className="h-5 w-5 text-brand" />
@@ -154,7 +158,7 @@ export function BrandStory({ content }: { content: StoreSettings["content"] }) {
             ))}
           </ul>
           <LinkButton href="/about" variant="link" className="mt-8" icon={null}>
-            More about Floriani <ArrowRight className="h-4 w-4" />
+            {t("home.moreAbout")} <ArrowRight className="h-4 w-4" />
           </LinkButton>
         </Reveal>
       </div>
@@ -162,18 +166,19 @@ export function BrandStory({ content }: { content: StoreSettings["content"] }) {
   );
 }
 
-export function OccasionShowcase({ occasions }: { occasions: CategoryDTO[] }) {
+export async function OccasionShowcase({ occasions }: { occasions: CategoryDTO[] }) {
   if (occasions.length === 0) return null;
+  const { t } = await getStoreI18n();
   return (
     <section id="occasions" className="bg-brand-900 py-16 text-ivory lg:py-24" aria-labelledby="occasions-heading">
       <div className="container-page">
         <Reveal>
           <div className="mx-auto max-w-2xl text-center">
-            <p className="eyebrow !text-brand-200">Shop by occasion</p>
+            <p className="eyebrow !text-brand-200">{t("home.occasionsEyebrow")}</p>
             <h2 id="occasions-heading" className="mt-3 font-display text-[2.15rem] leading-[1.08] sm:text-[2.75rem]">
-              For every moment worth marking
+              {t("home.occasionsTitle")}
             </h2>
-            <p className="mt-3 text-[15.5px] text-ivory/70">Tell us the occasion — we will help you find the right words in flowers.</p>
+            <p className="mt-3 text-[15.5px] text-ivory/70">{t("home.occasionsText")}</p>
           </div>
         </Reveal>
         <ul className="mt-12 grid grid-cols-2 gap-3 sm:gap-5 lg:grid-cols-5">
@@ -191,7 +196,7 @@ export function OccasionShowcase({ occasions }: { occasions: CategoryDTO[] }) {
                   </div>
                   <div className="absolute inset-x-0 bottom-0 flex items-end justify-between gap-2 p-4 sm:p-5">
                     <div>
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-ivory/70">For</p>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-ivory/70">{t("home.for")}</p>
                       <h3 className="font-display text-2xl leading-tight text-ivory">{o.name}</h3>
                     </div>
                     <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-ivory/15 text-ivory backdrop-blur transition-colors group-hover:bg-ivory group-hover:text-brand">
@@ -208,21 +213,22 @@ export function OccasionShowcase({ occasions }: { occasions: CategoryDTO[] }) {
   );
 }
 
-export function DeliverySection({ methods, currency, deliveryInfo }: { methods: DeliveryMethodDTO[]; currency: CurrencyCode; deliveryInfo: string }) {
+export async function DeliverySection({ methods, currency, deliveryInfo }: { methods: DeliveryMethodDTO[]; currency: CurrencyCode; deliveryInfo: string }) {
   if (methods.length === 0) return null;
+  const { t, f } = await getStoreI18n();
   return (
     <section className="py-16 lg:py-24" aria-labelledby="delivery-heading">
       <div className="container-page grid gap-10 lg:grid-cols-[0.9fr_1.1fr] lg:gap-16">
         <Reveal>
-          <p className="eyebrow">Delivery & pickup</p>
+          <p className="eyebrow">{t("home.deliveryEyebrow")}</p>
           <h2 id="delivery-heading" className="mt-3 font-display text-[2.15rem] leading-[1.08] text-ink sm:text-[2.75rem]">
-            From our hands to theirs
+            {t("home.deliveryTitle")}
           </h2>
           <p className="mt-4 max-w-md text-[15.5px] leading-relaxed text-ink-soft">
-            {deliveryInfo || "Choose a date and time window at checkout. Add a personal gift message and we will include it with your flowers."}
+            {deliveryInfo || t("home.deliveryText")}
           </p>
           <LinkButton href="/delivery" variant="outline" className="mt-7" icon={<ArrowRight className="h-4 w-4" />}>
-            Delivery details
+            {t("home.deliveryDetails")}
           </LinkButton>
         </Reveal>
         <ul className="grid gap-4 sm:grid-cols-2">
@@ -239,27 +245,27 @@ export function DeliverySection({ methods, currency, deliveryInfo }: { methods: 
                     {m.description && <p className="mt-2 text-sm leading-relaxed text-ink-muted">{m.description}</p>}
                     <dl className="mt-auto space-y-2 pt-5 text-sm">
                       <div className="flex justify-between gap-3 border-t border-line pt-3">
-                        <dt className="text-ink-muted">{m.type === "pickup" ? "Pickup" : "Delivery fee"}</dt>
+                        <dt className="text-ink-muted">{m.type === "pickup" ? t("checkout.pickup") : t("delivery.fee")}</dt>
                         <dd className="font-semibold text-ink tabular">
-                          {m.fee === 0 && m.zones.every((z) => !z.fee) ? "Free" : `from ${formatMoney(Math.min(m.fee, ...m.zones.map((z) => z.fee ?? m.fee)), currency)}`}
+                          {m.fee === 0 && m.zones.every((z) => !z.fee) ? t("common.free") : t("delivery.from", { amount: f.money(Math.min(m.fee, ...m.zones.map((z) => z.fee ?? m.fee)), currency) })}
                         </dd>
                       </div>
                       {m.freeOverAmount !== null && (
                         <div className="flex justify-between gap-3">
-                          <dt className="text-ink-muted">Free from</dt>
-                          <dd className="font-semibold text-ink tabular">{formatMoney(m.freeOverAmount, currency)}</dd>
+                          <dt className="text-ink-muted">{t("delivery.freeFrom")}</dt>
+                          <dd className="font-semibold text-ink tabular">{f.money(m.freeOverAmount, currency)}</dd>
                         </div>
                       )}
                       {m.estimatedTime && (
                         <div className="flex justify-between gap-3">
-                          <dt className="text-ink-muted">Timing</dt>
+                          <dt className="text-ink-muted">{t("delivery.timing")}</dt>
                           <dd className="text-right font-semibold text-ink">{m.estimatedTime}</dd>
                         </div>
                       )}
                       {m.timeWindows.length > 0 && (
                         <div className="flex justify-between gap-3">
                           <dt className="flex items-center gap-1.5 text-ink-muted">
-                            <Clock className="h-3.5 w-3.5" /> Time windows
+                            <Clock className="h-3.5 w-3.5" /> {t("delivery.timeWindows")}
                           </dt>
                           <dd className="font-semibold text-ink tabular">
                             {m.timeWindows[0].start}–{m.timeWindows[m.timeWindows.length - 1].end}
@@ -278,7 +284,8 @@ export function DeliverySection({ methods, currency, deliveryInfo }: { methods: 
   );
 }
 
-export function Testimonials({ reviews }: { reviews: PublicReview[] }) {
+export async function Testimonials({ reviews }: { reviews: PublicReview[] }) {
+  const { t } = await getStoreI18n();
   if (reviews.length === 0) {
     // No verified reviews yet: a neutral brand statement instead of invented testimonials.
     return (
@@ -286,9 +293,9 @@ export function Testimonials({ reviews }: { reviews: PublicReview[] }) {
         <Reveal className="container-page mx-auto max-w-3xl text-center">
           <Leaf className="mx-auto h-6 w-6 text-sage" />
           <p className="mt-6 font-display text-[1.9rem] italic leading-snug text-ink sm:text-[2.4rem]">
-            “Flowers are the quiet way of saying the things that matter most.”
+            {t("home.quote")}
           </p>
-          <p className="mt-5 text-sm font-semibold uppercase tracking-[0.2em] text-ink-muted">Floriani Flowers</p>
+          <p className="mt-5 text-sm font-semibold uppercase tracking-[0.2em] text-ink-muted">{t("brand.name")}</p>
         </Reveal>
       </section>
     );
@@ -298,7 +305,7 @@ export function Testimonials({ reviews }: { reviews: PublicReview[] }) {
       <div className="container-page">
         <Reveal>
           <div id="reviews-heading">
-            <SectionHeading align="center" eyebrow="Kind words" title="From our customers" description="Reviews from customers with a verified Floriani order." />
+            <SectionHeading align="center" eyebrow={t("home.reviewsEyebrow")} title={t("home.reviewsTitle")} description={t("home.reviewsText")} />
           </div>
         </Reveal>
         <ul className="mt-12 grid gap-5 md:grid-cols-3">
@@ -306,7 +313,7 @@ export function Testimonials({ reviews }: { reviews: PublicReview[] }) {
             <li key={r.id}>
               <Reveal delay={i * 80} className="h-full">
                 <figure className="flex h-full flex-col rounded-[1.5rem] border border-line bg-paper p-7">
-                  <div className="flex gap-0.5 text-brand" aria-label={`Rated ${r.rating} out of 5`}>
+                  <div className="flex gap-0.5 text-brand" aria-label={t("review.rated", { rating: r.rating })}>
                     {Array.from({ length: 5 }, (_, s) => (
                       <Star key={s} className={s < r.rating ? "h-4 w-4 fill-current" : "h-4 w-4 opacity-25"} aria-hidden="true" />
                     ))}
@@ -321,7 +328,7 @@ export function Testimonials({ reviews }: { reviews: PublicReview[] }) {
                         · <Link href={`/products/${r.productSlug}`} className="hover:text-brand">{r.productName}</Link>
                       </span>
                     )}
-                    <span className="mt-1 block text-[12px] text-success">Verified order</span>
+                    <span className="mt-1 block text-[12px] text-success">{t("review.verified")}</span>
                   </figcaption>
                 </figure>
               </Reveal>
@@ -333,7 +340,8 @@ export function Testimonials({ reviews }: { reviews: PublicReview[] }) {
   );
 }
 
-export function GallerySection({ items, instagramUrl }: { items: GalleryItemDTO[]; instagramUrl: string }) {
+export async function GallerySection({ items, instagramUrl }: { items: GalleryItemDTO[]; instagramUrl: string }) {
+  const { t } = await getStoreI18n();
   const withImages = items.filter((i) => i.image);
   // One large tile + 4 or 8 small tiles keeps the mosaic free of gaps.
   const visible = withImages.slice(0, withImages.length >= 9 ? 9 : 5);
@@ -345,12 +353,12 @@ export function GallerySection({ items, instagramUrl }: { items: GalleryItemDTO[
           <div id="gallery-heading">
             <SectionHeading
               eyebrow={`@${brand.instagramHandle}`}
-              title="From the studio"
-              description="Moments, colours and textures from our everyday work."
+              title={t("home.galleryTitle")}
+              description={t("home.galleryText")}
               action={
                 instagramUrl ? (
                   <LinkButton href={instagramUrl} target="_blank" rel="noopener noreferrer" variant="outline" icon={<InstagramIcon className="h-4 w-4" />}>
-                    Follow on Instagram
+                    {t("home.followInstagram")}
                   </LinkButton>
                 ) : undefined
               }
@@ -373,7 +381,7 @@ export function GallerySection({ items, instagramUrl }: { items: GalleryItemDTO[
               <li key={item.id} className={i === 0 ? "col-span-2 row-span-2" : ""}>
                 <Reveal delay={(i % 4) * 60}>
                   {item.link ? (
-                    <a href={item.link} target="_blank" rel="noopener noreferrer" aria-label={`${item.alt} (opens in a new tab)`}>
+                    <a href={item.link} target="_blank" rel="noopener noreferrer" aria-label={t("common.opensNewTab", { label: item.alt })}>
                       {tile}
                     </a>
                   ) : (

@@ -10,8 +10,10 @@ import { Checkbox, Field, FormError, Input, Select, Textarea } from "@/component
 import { Modal } from "@/components/ui/modal";
 import { useToast } from "@/components/ui/toast";
 import { api, errorMessage, fieldErrors } from "@/lib/client/api";
-import { MOTOR_VEHICLES, VEHICLE_LABELS, VEHICLE_TYPES, type VehicleType } from "@/lib/domain/orders";
+import { MOTOR_VEHICLES, VEHICLE_TYPES, type VehicleType } from "@/lib/domain/orders";
 import type { CourierDTO } from "@/lib/services/admin";
+import { useFormat, useT } from "@/i18n/client";
+import { vehicleLabel } from "@/i18n/labels";
 
 type Draft = {
   name: string;
@@ -31,29 +33,31 @@ const vehicleSummary = (c: Pick<CourierDTO, "vehicleType" | "vehicleModel" | "ve
 export function CouriersManager({ couriers }: { couriers: CourierDTO[] }) {
   // `null` = closed, "new" = add form, otherwise the courier being edited.
   const [editing, setEditing] = useState<CourierDTO | "new" | null>(null);
+  const t = useT();
+  const f = useFormat();
   const activeCount = couriers.filter((c) => c.isActive).length;
 
   return (
     <>
       <AdminPageHeader
-        title="Couriers"
-        crumbs={[{ label: "Delivery", href: "/admin/delivery" }, { label: "Couriers" }]}
-        description={`${activeCount} active · ${couriers.length - activeCount} inactive`}
+        title={t("admin.couriers.title")}
+        crumbs={[{ label: t("admin.delivery.title"), href: "/admin/delivery" }, { label: t("admin.couriers.title") }]}
+        description={t("admin.couriers.summary", { active: activeCount, inactive: couriers.length - activeCount })}
         actions={
           <Button size="sm" icon={<Plus className="h-4 w-4" />} onClick={() => setEditing("new")}>
-            Add courier
+            {t("admin.couriers.add")}
           </Button>
         }
       />
 
-      <Panel padded={false} title="Your couriers" description="Couriers are deactivated rather than deleted, so past orders keep showing who delivered them. Inactive couriers can't be assigned to new orders.">
+      <Panel padded={false} title={t("admin.couriers.yours")} description={t("admin.couriers.yoursHint")}>
         {couriers.length === 0 ? (
           <div className="flex flex-col items-center px-5 py-16 text-center">
             <UserRound className="h-8 w-8 text-ink-muted" aria-hidden="true" />
-            <p className="mt-3 font-semibold text-ink">No couriers yet</p>
-            <p className="mt-1 max-w-sm text-sm text-ink-muted">Add the people who deliver your bouquets so you can assign them to orders.</p>
+            <p className="mt-3 font-semibold text-ink">{t("admin.couriers.emptyTitle")}</p>
+            <p className="mt-1 max-w-sm text-sm text-ink-muted">{t("admin.couriers.emptyText")}</p>
             <Button size="sm" className="mt-4" icon={<Plus className="h-4 w-4" />} onClick={() => setEditing("new")}>
-              Add courier
+              {t("admin.couriers.add")}
             </Button>
           </div>
         ) : (
@@ -61,14 +65,14 @@ export function CouriersManager({ couriers }: { couriers: CourierDTO[] }) {
             <Table>
               <thead>
                 <tr>
-                  <th className={th}>Name</th>
-                  <th className={th}>Phone</th>
-                  <th className={th}>Transport</th>
-                  <th className={th}>Model / registration</th>
-                  <th className={th}>Status</th>
-                  <th className={`${th} text-right`}>Active deliveries</th>
+                  <th className={th}>{t("admin.common.name")}</th>
+                  <th className={th}>{t("form.phone")}</th>
+                  <th className={th}>{t("admin.couriers.transport")}</th>
+                  <th className={th}>{t("admin.couriers.modelRegistration")}</th>
+                  <th className={th}>{t("admin.common.status")}</th>
+                  <th className={`${th} text-right`}>{t("admin.couriers.activeDeliveries")}</th>
                   <th className={th}>
-                    <span className="sr-only">Actions</span>
+                    <span className="sr-only">{t("admin.common.actions")}</span>
                   </th>
                 </tr>
               </thead>
@@ -88,15 +92,15 @@ export function CouriersManager({ couriers }: { couriers: CourierDTO[] }) {
                         <span className="text-ink-muted">—</span>
                       )}
                     </td>
-                    <td className={td}>{VEHICLE_LABELS[c.vehicleType]}</td>
+                    <td className={td}>{vehicleLabel(t, c.vehicleType)}</td>
                     <td className={`${td} text-ink-soft`}>{vehicleSummary(c) || <span className="text-ink-muted">—</span>}</td>
                     <td className={td}>
-                      <Badge tone={c.isActive ? "success" : "neutral"}>{c.isActive ? "Active" : "Inactive"}</Badge>
+                      <Badge tone={c.isActive ? "success" : "neutral"}>{c.isActive ? t("admin.couriers.active") : t("admin.couriers.inactive")}</Badge>
                     </td>
-                    <td className={`${td} text-right font-semibold tabular`}>{c.activeDeliveries}</td>
+                    <td className={`${td} text-right font-semibold tabular`}>{f.number(c.activeDeliveries)}</td>
                     <td className={`${td} text-right`}>
-                      <Button size="sm" variant="ghost" icon={<Pencil className="h-3.5 w-3.5" />} onClick={() => setEditing(c)} aria-label={`Edit ${c.name}`}>
-                        Edit
+                      <Button size="sm" variant="ghost" icon={<Pencil className="h-3.5 w-3.5" />} onClick={() => setEditing(c)} aria-label={t("admin.common.editName", { name: c.name })}>
+                        {t("admin.common.edit")}
                       </Button>
                     </td>
                   </tr>
@@ -109,21 +113,21 @@ export function CouriersManager({ couriers }: { couriers: CourierDTO[] }) {
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="font-semibold text-ink">{c.name}</p>
-                      <p className="mt-0.5 text-[13px] text-ink-soft">{[VEHICLE_LABELS[c.vehicleType], vehicleSummary(c)].filter(Boolean).join(" · ")}</p>
+                      <p className="mt-0.5 text-[13px] text-ink-soft">{[vehicleLabel(t, c.vehicleType), vehicleSummary(c)].filter(Boolean).join(" · ")}</p>
                       {c.phone && (
                         <a href={`tel:${c.phone.replace(/[^\d+]/g, "")}`} className="mt-1 inline-flex items-center gap-1.5 text-[13px] text-ink-soft hover:text-brand">
                           <Phone className="h-3.5 w-3.5" aria-hidden="true" /> {c.phone}
                         </a>
                       )}
                     </div>
-                    <Button size="sm" variant="outline" onClick={() => setEditing(c)} aria-label={`Edit ${c.name}`}>
-                      Edit
+                    <Button size="sm" variant="outline" onClick={() => setEditing(c)} aria-label={t("admin.common.editName", { name: c.name })}>
+                      {t("admin.common.edit")}
                     </Button>
                   </div>
                   <div className="mt-2 flex flex-wrap items-center gap-2">
-                    <Badge tone={c.isActive ? "success" : "neutral"}>{c.isActive ? "Active" : "Inactive"}</Badge>
+                    <Badge tone={c.isActive ? "success" : "neutral"}>{c.isActive ? t("admin.couriers.active") : t("admin.couriers.inactive")}</Badge>
                     <span className="text-xs text-ink-muted tabular">
-                      {c.activeDeliveries} active {c.activeDeliveries === 1 ? "delivery" : "deliveries"}
+                      {t("admin.couriers.activeDeliveryCount", { count: c.activeDeliveries })}
                     </span>
                   </div>
                 </li>
@@ -141,6 +145,7 @@ export function CouriersManager({ couriers }: { couriers: CourierDTO[] }) {
 function CourierForm({ courier, onClose }: { courier: CourierDTO | null; onClose: () => void }) {
   const router = useRouter();
   const toast = useToast();
+  const t = useT();
   const [draft, setDraft] = useState<Draft>(
     courier
       ? {
@@ -164,7 +169,7 @@ function CourierForm({ courier, onClose }: { courier: CourierDTO | null; onClose
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     if (draft.name.trim().length < 2) {
-      setFields({ name: "Enter the courier's name." });
+      setFields({ name: t("admin.couriers.nameRequired") });
       return;
     }
     setBusy(true);
@@ -177,7 +182,7 @@ function CourierForm({ courier, onClose }: { courier: CourierDTO | null; onClose
     };
     try {
       await api<{ id: string }>(courier ? `/api/admin/couriers/${courier.id}` : "/api/admin/couriers", { method: courier ? "PUT" : "POST", body });
-      toast.success(courier ? "Courier saved" : "Courier added", courier && courier.isActive && !draft.isActive ? "They can no longer be assigned to new orders." : undefined);
+      toast.success(courier ? t("admin.couriers.saved") : t("admin.couriers.added"), courier && courier.isActive && !draft.isActive ? t("admin.couriers.deactivatedHint") : undefined);
       router.refresh();
       onClose();
     } catch (err) {
@@ -192,15 +197,15 @@ function CourierForm({ courier, onClose }: { courier: CourierDTO | null; onClose
     <Modal
       open
       onClose={onClose}
-      title={courier ? `Edit ${courier.name}` : "Add courier"}
-      description="Transport details are copied onto an order when the courier is assigned."
+      title={courier ? t("admin.common.editName", { name: courier.name }) : t("admin.couriers.add")}
+      description={t("admin.couriers.formHint")}
       footer={
         <div className="flex justify-end gap-2">
           <Button variant="ghost" onClick={onClose}>
-            Cancel
+            {t("common.cancel")}
           </Button>
           <Button type="submit" form="courier-form" loading={busy}>
-            {courier ? "Save changes" : "Add courier"}
+            {courier ? t("admin.common.saveChanges") : t("admin.couriers.add")}
           </Button>
         </div>
       }
@@ -208,43 +213,43 @@ function CourierForm({ courier, onClose }: { courier: CourierDTO | null; onClose
       <form id="courier-form" onSubmit={submit} className="space-y-4" noValidate>
         <FormError message={error} />
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field id="cr-name" label="Name" required error={fields.name}>
+          <Field id="cr-name" label={t("admin.common.name")} required error={fields.name}>
             <Input id="cr-name" value={draft.name} maxLength={120} autoComplete="off" onChange={(e) => set("name", e.target.value)} invalid={!!fields.name} />
           </Field>
-          <Field id="cr-phone" label="Phone" optional error={fields.phone}>
+          <Field id="cr-phone" label={t("form.phone")} optional error={fields.phone}>
             <Input id="cr-phone" type="tel" inputMode="tel" value={draft.phone} maxLength={32} placeholder="+374 …" onChange={(e) => set("phone", e.target.value)} invalid={!!fields.phone} />
           </Field>
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field id="cr-vehicle" label="Transport" error={fields.vehicleType}>
+          <Field id="cr-vehicle" label={t("admin.couriers.transport")} error={fields.vehicleType}>
             <Select id="cr-vehicle" value={draft.vehicleType} onChange={(e) => set("vehicleType", e.target.value as VehicleType)}>
               {VEHICLE_TYPES.map((v) => (
                 <option key={v} value={v}>
-                  {VEHICLE_LABELS[v]}
+                  {vehicleLabel(t, v)}
                 </option>
               ))}
             </Select>
           </Field>
           {!onFoot && (
-            <Field id="cr-model" label="Make / model" optional error={fields.vehicleModel}>
-              <Input id="cr-model" value={draft.vehicleModel} maxLength={80} placeholder={motor ? "Toyota Prius, white" : ""} onChange={(e) => set("vehicleModel", e.target.value)} invalid={!!fields.vehicleModel} />
+            <Field id="cr-model" label={t("admin.couriers.makeModel")} optional error={fields.vehicleModel}>
+              <Input id="cr-model" value={draft.vehicleModel} maxLength={80} placeholder={motor ? t("admin.couriers.makeModelPlaceholder") : ""} onChange={(e) => set("vehicleModel", e.target.value)} invalid={!!fields.vehicleModel} />
             </Field>
           )}
           {motor && (
-            <Field id="cr-reg" label="Registration" optional error={fields.vehicleRegistration}>
+            <Field id="cr-reg" label={t("admin.couriers.registration")} optional error={fields.vehicleRegistration}>
               <Input id="cr-reg" value={draft.vehicleRegistration} maxLength={20} onChange={(e) => set("vehicleRegistration", e.target.value.toUpperCase())} invalid={!!fields.vehicleRegistration} />
             </Field>
           )}
         </div>
-        <Field id="cr-notes" label="Notes" optional hint="Visible to staff only." error={fields.notes}>
+        <Field id="cr-notes" label={t("admin.couriers.notes")} optional hint={t("admin.couriers.notesHint")} error={fields.notes}>
           <Textarea id="cr-notes" rows={2} value={draft.notes} maxLength={500} onChange={(e) => set("notes", e.target.value)} invalid={!!fields.notes} />
         </Field>
         <Checkbox
           id="cr-active"
           checked={draft.isActive}
           onChange={(e) => set("isActive", e.target.checked)}
-          label="Active"
-          description="Couriers are never deleted. Untick to deactivate: they stay on past orders but can't be assigned to new ones."
+          label={t("admin.couriers.active")}
+          description={t("admin.couriers.activeHint")}
         />
       </form>
     </Modal>

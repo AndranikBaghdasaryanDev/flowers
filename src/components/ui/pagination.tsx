@@ -1,4 +1,6 @@
-import Link from "next/link";
+"use client";
+
+import { Link, useT } from "@/i18n/client";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/cn";
 
@@ -16,6 +18,7 @@ export function Pagination({
   params: Record<string, string | undefined>;
   className?: string;
 }) {
+  const t = useT();
   if (pageCount <= 1) return null;
   const href = (p: number) => {
     const sp = new URLSearchParams();
@@ -31,9 +34,9 @@ export function Pagination({
   }
   const item = "inline-flex h-10 min-w-10 items-center justify-center rounded-full px-3 text-sm font-semibold transition-colors";
   return (
-    <nav aria-label="Pagination" className={cn("flex items-center justify-center gap-1.5", className)}>
+    <nav aria-label={t("common.pagination")} className={cn("flex items-center justify-center gap-1.5", className)}>
       {page > 1 ? (
-        <Link href={href(page - 1)} className={cn(item, "text-ink hover:bg-cream")} aria-label="Previous page" scroll>
+        <Link href={href(page - 1)} className={cn(item, "text-ink hover:bg-cream")} aria-label={t("common.previousPage")} scroll>
           <ChevronLeft className="h-4 w-4" />
         </Link>
       ) : (
@@ -58,7 +61,7 @@ export function Pagination({
         ),
       )}
       {page < pageCount ? (
-        <Link href={href(page + 1)} className={cn(item, "text-ink hover:bg-cream")} aria-label="Next page">
+        <Link href={href(page + 1)} className={cn(item, "text-ink hover:bg-cream")} aria-label={t("common.nextPage")}>
           <ChevronRight className="h-4 w-4" />
         </Link>
       ) : (

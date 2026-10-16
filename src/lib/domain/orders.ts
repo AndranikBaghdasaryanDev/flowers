@@ -3,6 +3,7 @@
  * (which enforces it) and the admin UI (which only offers valid actions).
  */
 import type { Permission } from "@/lib/domain/roles";
+import { msg, type Msg } from "@/lib/api/errors";
 
 export const ORDER_STATUSES = [
   "pending",
@@ -50,6 +51,13 @@ export function orderStatusLabel(status: OrderStatus, fulfillment?: FulfillmentT
   }
   if (status === "completed" && fulfillment === "pickup") return "Picked up";
   return ORDER_STATUS_LABELS[status];
+}
+
+/** Dictionary key of a status label (the `orderStatus` namespace), mirroring orderStatusLabel(). */
+export function orderStatusKey(status: OrderStatus, fulfillment?: FulfillmentType): string {
+  if (status === "ready") return fulfillment === "pickup" ? "orderStatus.readyPickup" : fulfillment === "delivery" ? "orderStatus.readyDispatch" : "orderStatus.ready";
+  if (status === "completed" && fulfillment === "pickup") return "orderStatus.pickedUp";
+  return `orderStatus.${status}`;
 }
 
 export const PAYMENT_STATUS_LABELS: Record<PaymentStatus, string> = {
@@ -121,21 +129,25 @@ export type TransitionContext = {
   total: number;
 };
 
-export type TransitionCheck = { ok: true } | { ok: false; reason: string };
+/** `reason` is a translatable message (see `@/lib/api/errors`). */
+export type TransitionCheck = { ok: true } | { ok: false; reason: Msg };
 
 export function checkTransition(from: OrderStatus, to: OrderStatus, ctx: TransitionContext): TransitionCheck {
-  if (from === to) return { ok: false, reason: "The order already has this status." };
+  if (from === to) return { ok: false, reason: msg("server.orders.sameStatus") };
   if (!allowedNextStatuses(from, ctx.fulfillment).includes(to)) {
     return {
       ok: false,
-      reason: `An order cannot move from “${orderStatusLabel(from, ctx.fulfillment)}” to “${orderStatusLabel(to, ctx.fulfillment)}”.`,
+      reason: msg("server.orders.invalidTransition", {
+        from: msg(orderStatusKey(from, ctx.fulfillment)),
+        to: msg(orderStatusKey(to, ctx.fulfillment)),
+      }),
     };
   }
   if (to === "out_for_delivery" && ctx.requiresCourier && !ctx.hasCourier) {
-    return { ok: false, reason: "Assign a courier before dispatching the order." };
+    return { ok: false, reason: msg("server.orders.assignCourierFirst") };
   }
   if (to === "completed" && ctx.total > 0 && ctx.paymentStatus !== "paid") {
-    return { ok: false, reason: "Record the payment as received before completing the order." };
+    return { ok: false, reason: msg("server.orders.recordPaymentFirst") };
   }
   return { ok: true };
 }
@@ -154,10 +166,13 @@ export function checkPaymentTransition(
   orderStatus: OrderStatus,
 ): TransitionCheck {
   if (!PAYMENT_TRANSITIONS[from].includes(to)) {
-    return { ok: false, reason: `Payment cannot change from ${PAYMENT_STATUS_LABELS[from]} to ${PAYMENT_STATUS_LABELS[to]}.` };
+    return {
+      ok: false,
+      reason: msg("server.orders.invalidPaymentTransition", { from: msg(`paymentStatus.${from}`), to: msg(`paymentStatus.${to}`) }),
+    };
   }
   if (to === "paid" && orderStatus === "cancelled") {
-    return { ok: false, reason: "A cancelled order cannot be marked as paid." };
+    return { ok: false, reason: msg("server.orders.cancelledNotPaid") };
   }
   return { ok: true };
 }

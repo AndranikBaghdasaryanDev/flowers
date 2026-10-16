@@ -4,24 +4,29 @@ import { requireStaffPage } from "@/lib/auth/guards";
 import { loadSettings } from "@/lib/services/settings";
 import { AdminPageHeader, NoAccess } from "@/components/admin/ui";
 import { LegalForm } from "./legal-form";
+import { getAdminI18n } from "@/i18n/server";
 
-export const metadata = { title: "Legal pages" };
+export async function generateMetadata() {
+  const { t } = await getAdminI18n();
+  return { title: t("admin.legal.title") };
+}
 
 async function LegalContent() {
   await connection();
   const { allowed } = await requireStaffPage("/admin/content/legal", "content:manage");
-  if (!allowed) return <NoAccess what="content" />;
+  const { t } = await getAdminI18n();
+  if (!allowed) return <NoAccess what={t("admin.nav.content")} />;
   const settings = await loadSettings();
   const { privacy, terms, returns, reviewedAt } = settings.legal;
 
   return (
     <>
       <AdminPageHeader
-        title="Legal pages"
-        description="The privacy policy, terms & conditions and cancellations & returns texts shown on your store."
-        crumbs={[{ label: "Gallery & content", href: "/admin/content" }, { label: "Legal pages" }]}
+        title={t("admin.legal.title")}
+        description={t("admin.legal.description")}
+        crumbs={[{ label: t("admin.nav.content"), href: "/admin/content" }, { label: t("admin.legal.title") }]}
       />
-      <LegalForm initial={{ privacy, terms, returns }} reviewedAt={reviewedAt} timeZone={settings.timeZone} />
+      <LegalForm initial={{ privacy, terms, returns }} initialI18n={settings.i18n ?? {}} reviewedAt={reviewedAt} timeZone={settings.timeZone} />
     </>
   );
 }

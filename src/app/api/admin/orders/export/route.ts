@@ -5,8 +5,9 @@ import { loadSettings } from "@/lib/services/settings";
 import { csvResponse, toCsv } from "@/lib/csv";
 import { toMajor, type CurrencyCode } from "@/lib/domain/money";
 import { formatDateTime } from "@/lib/domain/time";
-import { PAYMENT_METHOD_LABELS, ORDER_STATUS_LABELS } from "@/lib/domain/orders";
 import { hasPermission } from "@/lib/domain/roles";
+import { getAdminLocale, translatorFor } from "@/i18n/server";
+import { paymentMethodLabel, paymentStatusLabel, statusLabel } from "@/i18n/labels";
 
 /** CSV export of the currently filtered orders. Customer contact columns require customers:read. */
 export const GET = route(async (req) => {
@@ -14,18 +15,22 @@ export const GET = route(async (req) => {
   const query = readQuery(req, orderListQuerySchema);
   const [orders, settings] = await Promise.all([exportOrdersAdmin(query), loadSettings()]);
   const withContacts = hasPermission(user.role, "customers:read");
+  const t = translatorFor(await getAdminLocale());
   const headers = [
-    "Order", "Placed", "Status", "Payment status", "Payment method", "Fulfilment", "Method", "Delivery date", "Time window",
-    "Customer", ...(withContacts ? ["Phone", "Email"] : []), "Area", "Items", "Units", "Subtotal", "Delivery fee", "Discount", "Total", "Currency", "Courier",
+    t("admin.orders.csv.order"), t("admin.orders.csv.placed"), t("admin.orders.csv.status"), t("admin.orders.csv.paymentStatus"), t("admin.orders.csv.paymentMethod"),
+    t("admin.orders.csv.fulfilment"), t("admin.orders.csv.method"), t("admin.orders.csv.deliveryDate"), t("admin.orders.csv.timeWindow"),
+    t("admin.orders.csv.customer"), ...(withContacts ? [t("admin.orders.csv.phone"), t("admin.orders.csv.email")] : []), t("admin.orders.csv.area"),
+    t("admin.orders.csv.items"), t("admin.orders.csv.units"), t("admin.orders.csv.subtotal"), t("admin.orders.csv.deliveryFee"), t("admin.orders.csv.discount"),
+    t("admin.orders.csv.total"), t("admin.orders.csv.currency"), t("admin.orders.csv.courier"),
   ];
   const rows = orders.map((o) => {
     const c = o.currency as CurrencyCode;
     return [
       o.orderNumber,
       formatDateTime(o.createdAt, settings.timeZone, { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }),
-      ORDER_STATUS_LABELS[o.status],
-      o.paymentStatus,
-      PAYMENT_METHOD_LABELS[o.paymentMethod],
+      statusLabel(t, o.status),
+      paymentStatusLabel(t, o.paymentStatus),
+      paymentMethodLabel(t, o.paymentMethod),
       o.fulfillment.kind,
       o.fulfillment.methodName,
       o.deliveryDate,

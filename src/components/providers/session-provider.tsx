@@ -61,7 +61,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const toggleFavorite = useCallback(
     async (productId: string) => {
       if (!user) {
-        router.push(`/login?next=${encodeURIComponent(window.location.pathname + window.location.search)}`);
+        // This provider also wraps the admin (outside the language provider), so derive the prefix from the URL.
+        const prefix = /^\/(hy|en|ru)(?=\/|$)/.exec(window.location.pathname)?.[0] ?? "";
+        router.push(`${prefix}/login?next=${encodeURIComponent(window.location.pathname + window.location.search)}`);
         return null;
       }
       const next = !favorites.has(productId);

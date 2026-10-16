@@ -1,5 +1,5 @@
 import { Suspense } from "react";
-import Link from "next/link";
+import { Link } from "@/i18n/client";
 import { connection } from "next/server";
 import { requireStaffPage } from "@/lib/auth/guards";
 import { listAudit } from "@/lib/services/admin";
@@ -7,46 +7,28 @@ import { loadSettings } from "@/lib/services/settings";
 import { AdminPageHeader, FilterLink, MobileCards, NoAccess, Panel, Table, td, th } from "@/components/admin/ui";
 import { Badge } from "@/components/ui/badge";
 import { Pagination } from "@/components/ui/pagination";
-import { formatDateTime } from "@/lib/domain/time";
+import { getAdminI18n } from "@/i18n/server";
 
-export const metadata = { title: "Activity log" };
+export async function generateMetadata() {
+  const { t } = await getAdminI18n();
+  return { title: t("admin.audit.title") };
+}
 
-const ENTITY_TABS = [
-  { value: "", label: "All" },
-  { value: "order", label: "Orders" },
-  { value: "product", label: "Products" },
-  { value: "category", label: "Categories" },
-  { value: "settings", label: "Settings" },
-  { value: "user", label: "Users" },
-  { value: "delivery_method", label: "Delivery methods" },
-  { value: "courier", label: "Couriers" },
-  { value: "review", label: "Reviews" },
-  { value: "gallery", label: "Gallery" },
-];
-
-const ENTITY_LABELS: Record<string, string> = {
-  order: "Order",
-  product: "Product",
-  category: "Category",
-  settings: "Settings",
-  user: "User",
-  delivery_method: "Delivery method",
-  courier: "Courier",
-  review: "Review",
-  gallery: "Gallery",
-};
-const entityLabel = (e: string) => ENTITY_LABELS[e] ?? e.replace(/_/g, " ");
+/** Entity filters; each value has `admin.audit.tabs.*` and `admin.audit.entity.*` labels. */
+const ENTITY_TABS = ["", "order", "product", "category", "settings", "user", "delivery_method", "courier", "review", "gallery"];
 
 const STAMP: Intl.DateTimeFormatOptions = { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit" };
 
 async function AuditContent({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   await connection();
   const { allowed } = await requireStaffPage("/admin/audit", "audit:read");
-  if (!allowed) return <NoAccess what="the activity log" />;
+  const { t, f } = await getAdminI18n();
+  if (!allowed) return <NoAccess what={t("admin.audit.title")} />;
+  const entityLabel = (e: string) => t.dynamic(`admin.audit.entity.${e}`, undefined, e.replace(/_/g, " "));
   const raw = await searchParams;
   const flat: Record<string, string> = {};
   for (const [k, v] of Object.entries(raw)) if (typeof v === "string") flat[k] = v;
-  const entity = ENTITY_TABS.some((t) => t.value === flat.entity) ? (flat.entity ?? "") : "";
+  const entity = ENTITY_TABS.includes(flat.entity ?? "") ? (flat.entity ?? "") : "";
   const page = Math.max(1, Math.floor(Number(flat.page ?? 1)) || 1);
   const [result, settings] = await Promise.all([listAudit(page, entity || undefined), loadSettings()]);
   const tz = settings.timeZone;
@@ -55,36 +37,36 @@ async function AuditContent({ searchParams }: { searchParams: Promise<Record<str
   return (
     <>
       <AdminPageHeader
-        title="Activity log"
-        description={`${result.total} recorded ${result.total === 1 ? "action" : "actions"} · times shown in ${tz}`}
+        title={t("admin.audit.title")}
+        description={t("admin.audit.summary", { count: result.total, tz })}
       />
       <div className="mb-5 -mx-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:flex-wrap sm:px-0">
-        {ENTITY_TABS.map((t) => (
-          <FilterLink key={t.value} href={t.value ? `/admin/audit?entity=${t.value}` : "/admin/audit"} active={entity === t.value}>
-            {t.label}
+        {ENTITY_TABS.map((value) => (
+          <FilterLink key={value} href={value ? `/admin/audit?entity=${value}` : "/admin/audit"} active={entity === value}>
+            {value ? t.dynamic(`admin.audit.tabs.${value}`) : t("admin.common.all")}
           </FilterLink>
         ))}
       </div>
 
       <Panel padded={false}>
         {result.items.length === 0 ? (
-          <p className="px-5 py-16 text-center text-sm text-ink-muted">No activity recorded{entity ? " for this type" : ""} yet.</p>
+          <p className="px-5 py-16 text-center text-sm text-ink-muted">{entity ? t("admin.audit.emptyType") : t("admin.audit.empty")}</p>
         ) : (
           <>
             <Table>
               <thead>
                 <tr>
-                  <th className={th}>Time</th>
-                  <th className={th}>Who</th>
-                  <th className={th}>What</th>
-                  <th className={th}>Area</th>
-                  <th className={th}>Action</th>
+                  <th className={th}>{t("admin.audit.time")}</th>
+                  <th className={th}>{t("admin.audit.who")}</th>
+                  <th className={th}>{t("admin.audit.what")}</th>
+                  <th className={th}>{t("admin.audit.area")}</th>
+                  <th className={th}>{t("admin.audit.action")}</th>
                 </tr>
               </thead>
               <tbody>
                 {result.items.map((a) => (
                   <tr key={a.id}>
-                    <td className={`${td} whitespace-nowrap text-ink-soft tabular`}>{formatDateTime(a.createdAt, tz, STAMP)}</td>
+                    <td className={`${td} whitespace-nowrap text-ink-soft tabular`}>{f.dateTime(a.createdAt, tz, STAMP)}</td>
                     <td className={`${td} font-medium text-ink`}>{a.actorName}</td>
                     <td className={`${td} text-ink`}>
                       {a.entityType === "order" && a.entityId ? (
@@ -120,7 +102,7 @@ async function AuditContent({ searchParams }: { searchParams: Promise<Record<str
                     )}
                   </p>
                   <p className="mt-1 text-xs text-ink-muted tabular">
-                    {formatDateTime(a.createdAt, tz, STAMP)} · <span className="font-mono">{a.action}</span>
+                    {f.dateTime(a.createdAt, tz, STAMP)} · <span className="font-mono">{a.action}</span>
                   </p>
                 </li>
               ))}

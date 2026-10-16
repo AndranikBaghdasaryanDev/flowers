@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import Link from "next/link";
+import { Link, useT } from "@/i18n/client";
 import { useState } from "react";
 import { Heart, Plus, Check } from "lucide-react";
 import { Price } from "@/components/ui/price";
@@ -12,12 +12,12 @@ import { ImageFallback } from "@/components/store/image-fallback";
 import { cn } from "@/lib/cn";
 import type { ProductCardDTO } from "@/lib/types";
 
-const BADGE_LABEL = { bestseller: "Bestseller", new: "New", sale: "Sale" } as const;
 
 export function ProductCard({ product, priority, sizes }: { product: ProductCardDTO; priority?: boolean; sizes?: string }) {
   const cart = useCart();
   const toast = useToast();
   const { favorites, toggleFavorite } = useSession();
+  const t = useT();
   const [added, setAdded] = useState(false);
   const [imgError, setImgError] = useState(false);
   const isFavorite = favorites.has(product.id);
@@ -34,7 +34,7 @@ export function ProductCard({ product, priority, sizes }: { product: ProductCard
     });
     setAdded(true);
     window.setTimeout(() => setAdded(false), 1600);
-    toast.success(`${product.name} added to your bag`, undefined, { label: "View bag", href: "/cart" });
+    toast.success(t("product.addedToBag", { name: product.name }), undefined, { label: t("cart.viewBag"), href: "/cart" });
   };
 
   return (
@@ -84,12 +84,12 @@ export function ProductCard({ product, priority, sizes }: { product: ProductCard
                 b === "sale" ? "bg-brand text-white" : b === "bestseller" ? "bg-ivory/95 text-brand" : "bg-sage text-white",
               )}
             >
-              {BADGE_LABEL[b]}
+              {t(`product.badge.${b}`)}
             </span>
           ))}
           {product.isSample && (
-            <span className="rounded-full bg-ink/70 px-2.5 py-1 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-ivory backdrop-blur" title="Illustrative sample product — not a real Floriani listing">
-              Sample
+            <span className="rounded-full bg-ink/70 px-2.5 py-1 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-ivory backdrop-blur" title={t("product.sampleTitle")}>
+              {t("product.sample")}
             </span>
           )}
         </div>
@@ -98,7 +98,7 @@ export function ProductCard({ product, priority, sizes }: { product: ProductCard
           type="button"
           onClick={() => void toggleFavorite(product.id)}
           aria-pressed={isFavorite}
-          aria-label={isFavorite ? `Remove ${product.name} from favourites` : `Add ${product.name} to favourites`}
+          aria-label={isFavorite ? t("product.removeFavorite", { name: product.name }) : t("product.addFavorite", { name: product.name })}
           className="absolute right-3 top-3 z-10 inline-flex h-10 w-10 items-center justify-center rounded-full bg-ivory/90 text-ink shadow-sm backdrop-blur transition-all hover:scale-105 hover:text-brand"
         >
           <Heart className={cn("h-[18px] w-[18px] transition-colors", isFavorite && "fill-brand text-brand")} />
@@ -111,7 +111,7 @@ export function ProductCard({ product, priority, sizes }: { product: ProductCard
               type="button"
               onClick={quickAdd}
               className="absolute bottom-3 right-3 z-10 inline-flex h-11 w-11 items-center justify-center rounded-full bg-brand text-white shadow-lift transition-transform active:scale-95 lg:hidden"
-              aria-label={`Add ${product.name} to bag`}
+              aria-label={t("product.addNamedToBag", { name: product.name })}
             >
               {added ? <Check className="h-5 w-5" /> : <Plus className="h-5 w-5" />}
             </button>
@@ -123,11 +123,11 @@ export function ProductCard({ product, priority, sizes }: { product: ProductCard
               >
                 {added ? (
                   <>
-                    <Check className="h-4 w-4" /> Added
+                    <Check className="h-4 w-4" /> {t("product.added")}
                   </>
                 ) : (
                   <>
-                    <Plus className="h-4 w-4" /> Add to bag
+                    <Plus className="h-4 w-4" /> {t("product.addToBag")}
                   </>
                 )}
               </button>
@@ -135,7 +135,7 @@ export function ProductCard({ product, priority, sizes }: { product: ProductCard
           </>
         ) : (
           <span className="absolute inset-x-3 bottom-3 rounded-full bg-ivory/95 py-2.5 text-center text-[12.5px] font-semibold text-ink-soft backdrop-blur">
-            Currently unavailable
+            {t("product.unavailable")}
           </span>
         )}
       </div>
@@ -149,7 +149,7 @@ export function ProductCard({ product, priority, sizes }: { product: ProductCard
         </h3>
         <div className="mt-1.5 flex items-center justify-between gap-2">
           <Price amount={product.price} compareAt={product.compareAtPrice} currency={product.currency} />
-          {product.lowStock !== null && <span className="text-[12px] font-medium text-warning">{product.availabilityLabel}</span>}
+          {product.lowStock !== null && <span className="text-[12px] font-medium text-warning">{t("product.onlyLeft", { count: product.lowStock })}</span>}
         </div>
       </div>
     </article>

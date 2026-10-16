@@ -11,6 +11,10 @@ import { useToast } from "@/components/ui/toast";
 import { api, errorMessage, fieldErrors } from "@/lib/client/api";
 import { CURRENCIES, type CurrencyCode } from "@/lib/domain/money";
 import { isValidTimeZone } from "@/lib/domain/time";
+import { TranslationTabs, pickOverrides, translationFields } from "@/components/admin/translation-tabs";
+import type { I18nOverrides } from "@/lib/models/_util";
+import type { SettingsText } from "@/lib/models/content";
+import { useT } from "@/i18n/client";
 
 type Contact = { phone: string; email: string; whatsapp: string; address: string; hours: string; mapUrl: string };
 type Social = { instagram: string; facebook: string; telegram: string };
@@ -30,7 +34,11 @@ export type SettingsFormValues = {
   contact: Contact;
   social: Social;
   checkout: Checkout;
+  /** Stored store-text overrides; only the general store fields are edited and saved here. */
+  i18n: I18nOverrides<SettingsText>;
 };
+
+const SETTINGS_TEXT = ["tagline", "contactAddress", "contactHours", "orderNotice"] as const;
 
 type FormState = Omit<SettingsFormValues, "checkout"> & { checkout: Omit<Checkout, "maxQuantityPerItem"> & { maxQuantityPerItem: string } };
 
@@ -39,6 +47,7 @@ const SMTP_VARS = ["SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASS", "EMAIL_FR
 export function SettingsForm({ initial, currency, emailConfigured }: { initial: SettingsFormValues; currency: CurrencyCode; emailConfigured: boolean }) {
   const router = useRouter();
   const toast = useToast();
+  const t = useT();
   const [form, setForm] = useState<FormState>({
     ...initial,
     checkout: { ...initial.checkout, maxQuantityPerItem: String(initial.checkout.maxQuantityPerItem) },
@@ -65,6 +74,20 @@ export function SettingsForm({ initial, currency, emailConfigured }: { initial: 
     setDirty(true);
   };
 
+  const translated = translationFields(
+    form.i18n,
+    (fn) => {
+      setForm((f) => ({ ...f, i18n: fn(f.i18n) }));
+      setDirty(true);
+    },
+    [
+      { key: "tagline", label: t("admin.settings.tagline"), base: form.tagline, maxLength: 160, group: t("admin.settings.store") },
+      { key: "contactAddress", label: t("admin.settings.address"), base: form.contact.address, maxLength: 300, group: t("admin.settings.contact") },
+      { key: "contactHours", label: t("admin.settings.hours"), base: form.contact.hours, rows: 3, maxLength: 300, group: t("admin.settings.contact") },
+      { key: "orderNotice", label: t("admin.settings.notice"), base: form.checkout.orderNotice, rows: 3, maxLength: 500, group: t("admin.settings.checkout") },
+    ],
+  );
+
   /** Props for a field whose API error key is `key` (e.g. "contact.email"). */
   const wire = (key: string, hint?: string) => {
     const id = `st-${key.replace(".", "-")}`;
@@ -78,8 +101,8 @@ export function SettingsForm({ initial, currency, emailConfigured }: { initial: 
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
     if (noPayment) {
-      setFields({ "checkout.cashOnDelivery": "Enable at least one payment method." });
-      setError("Please fix the highlighted fields.");
+      setFields({ "checkout.cashOnDelivery": t("admin.settings.needPaymentMethod") });
+      setError(t("admin.common.fixFields"));
       document.getElementById("payments")?.scrollIntoView({ behavior: "smooth", block: "start" });
       return;
     }
@@ -101,208 +124,209 @@ export function SettingsForm({ initial, currency, emailConfigured }: { initial: 
           contact: trimUrls(form.contact, ["phone", "email", "whatsapp", "mapUrl"]),
           social: trimUrls(form.social, ["instagram", "facebook", "telegram"]),
           checkout: { ...form.checkout, maxQuantityPerItem: Number(form.checkout.maxQuantityPerItem) },
+          i18n: pickOverrides(form.i18n, SETTINGS_TEXT),
         },
       });
       setDirty(false);
-      toast.success("Settings saved");
+      toast.success(t("admin.settings.saved"));
       router.refresh();
     } catch (err) {
       setError(errorMessage(err));
       setFields(fieldErrors(err));
-      toast.error("Settings not saved", errorMessage(err));
+      toast.error(t("admin.settings.notSaved"), errorMessage(err));
     } finally {
       setBusy(false);
     }
   };
 
-  const tzHint = "An IANA time zone such as Asia/Yerevan. Used for business days, delivery dates and reports.";
-  const qtyHint = "The most of one product a customer can add to a single order (1–99).";
-  const hoursHint = "One line per day or range, e.g. “Mon–Sat 09:00–20:00”.";
-  const mapHint = "A Google Maps or Yandex Maps link to your shop.";
-  const noticeHint = "Shown to customers on the checkout page, e.g. about holiday delivery times.";
+  const tzHint = t("admin.settings.timeZoneHint");
+  const qtyHint = t("admin.settings.maxQtyHint");
+  const hoursHint = t("admin.settings.hoursHint");
+  const mapHint = t("admin.settings.mapHint");
+  const noticeHint = t("admin.settings.noticeHint");
 
   return (
     <form onSubmit={save} noValidate className="space-y-6">
       <FormError message={error} />
 
       <div className="grid gap-6 xl:grid-cols-[1.5fr_1fr]">
-        <div className="min-w-0 space-y-6">
-          <Panel title="Store" description="Shown in the header, footer, emails and browser tab.">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field id="st-storeName" label="Store name" required error={fields.storeName}>
-                <Input {...wire("storeName")} value={form.storeName} maxLength={80} onChange={(e) => setTop("storeName", e.target.value)} />
-              </Field>
-              <Field id="st-tagline" label="Tagline" optional error={fields.tagline}>
-                <Input {...wire("tagline")} value={form.tagline} maxLength={160} onChange={(e) => setTop("tagline", e.target.value)} />
-              </Field>
-              <Field
-                id="st-timeZone"
-                label="Time zone"
-                required
-                className="sm:col-span-2"
-                error={fields.timeZone ?? (tzLooksInvalid ? "This does not look like a known time zone (e.g. Asia/Yerevan, Europe/London)." : undefined)}
-                hint={tzHint}
-              >
-                <Input
-                  {...wire("timeZone", tzHint)}
-                  invalid={!!fields.timeZone || tzLooksInvalid}
-                  aria-describedby={fields.timeZone || tzLooksInvalid ? "st-timeZone-error" : "st-timeZone-hint"}
-                  value={form.timeZone}
-                  maxLength={64}
-                  autoComplete="off"
-                  spellCheck={false}
-                  placeholder="Asia/Yerevan"
-                  onChange={(e) => setTop("timeZone", e.target.value)}
-                />
-              </Field>
-            </div>
-          </Panel>
-
-          <Panel title="Contact" description="Shown on the Contact page, in the footer and in order emails. Leave a field empty to hide it.">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field id="st-contact-phone" label="Phone" optional error={fields["contact.phone"]}>
-                <Input {...wire("contact.phone")} type="tel" autoComplete="off" value={form.contact.phone} maxLength={32} onChange={(e) => setContact("phone", e.target.value)} />
-              </Field>
-              <Field id="st-contact-whatsapp" label="WhatsApp number" optional error={fields["contact.whatsapp"]}>
-                <Input {...wire("contact.whatsapp")} type="tel" autoComplete="off" value={form.contact.whatsapp} maxLength={32} onChange={(e) => setContact("whatsapp", e.target.value)} />
-              </Field>
-              <Field id="st-contact-email" label="Email" optional error={fields["contact.email"]} className="sm:col-span-2">
-                <Input {...wire("contact.email")} type="email" autoComplete="off" value={form.contact.email} maxLength={254} onChange={(e) => setContact("email", e.target.value)} />
-              </Field>
-              <Field id="st-contact-address" label="Address" optional error={fields["contact.address"]} className="sm:col-span-2">
-                <Input {...wire("contact.address")} value={form.contact.address} maxLength={300} onChange={(e) => setContact("address", e.target.value)} />
-              </Field>
-              <Field id="st-contact-hours" label="Opening hours" optional error={fields["contact.hours"]} hint={hoursHint}>
-                <Textarea {...wire("contact.hours", hoursHint)} rows={3} value={form.contact.hours} maxLength={300} onChange={(e) => setContact("hours", e.target.value)} />
-              </Field>
-              <Field id="st-contact-mapUrl" label="Map link" optional error={fields["contact.mapUrl"]} hint={mapHint}>
-                <Input {...wire("contact.mapUrl", mapHint)} type="url" inputMode="url" placeholder="https://" value={form.contact.mapUrl} maxLength={500} onChange={(e) => setContact("mapUrl", e.target.value)} />
-              </Field>
-            </div>
-          </Panel>
-
-          <Panel title="Social links" description="Full profile URLs. Empty links are hidden.">
-            <div className="grid gap-4 sm:grid-cols-3">
-              {(["instagram", "facebook", "telegram"] as const).map((k) => (
-                <Field key={k} id={`st-social-${k}`} label={k === "instagram" ? "Instagram" : k === "facebook" ? "Facebook" : "Telegram"} optional error={fields[`social.${k}`]}>
-                  <Input {...wire(`social.${k}`)} type="url" inputMode="url" placeholder="https://" value={form.social[k]} maxLength={300} onChange={(e) => setSocial(k, e.target.value)} />
+        <TranslationTabs fields={translated} errors={fields} asPanels className="min-w-0">
+          <div className="space-y-6">
+            <Panel title={t("admin.settings.store")} description={t("admin.settings.storeHint")}>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field id="st-storeName" label={t("admin.settings.storeName")} required error={fields.storeName}>
+                  <Input {...wire("storeName")} value={form.storeName} maxLength={80} onChange={(e) => setTop("storeName", e.target.value)} />
                 </Field>
-              ))}
-            </div>
-          </Panel>
-
-          <section className="scroll-mt-24 rounded-2xl border border-line bg-paper" aria-labelledby="payments">
-            <div className="border-b border-line px-5 py-4">
-              <h2 id="payments" className="scroll-mt-24 flex items-center gap-2 font-sans text-[15px] font-semibold tracking-normal text-ink">
-                <CreditCard className="h-4 w-4" aria-hidden="true" /> Checkout & payments
-              </h2>
-              <p className="mt-0.5 text-[13px] text-ink-muted">How customers can order and pay.</p>
-            </div>
-            <div className="space-y-6 p-5">
-              <fieldset className="space-y-3">
-                <legend className="mb-3 text-[13px] font-semibold text-ink">Payment methods</legend>
-                <Checkbox
-                  id="st-checkout-cashOnDelivery"
-                  checked={form.checkout.cashOnDelivery}
-                  onChange={(e) => setCheckout("cashOnDelivery", e.target.checked)}
-                  label="Cash on delivery"
-                  description="The customer pays the courier when the order is delivered."
-                  aria-invalid={!!fields["checkout.cashOnDelivery"] || undefined}
-                />
-                <Checkbox
-                  id="st-checkout-cashOnPickup"
-                  checked={form.checkout.cashOnPickup}
-                  onChange={(e) => setCheckout("cashOnPickup", e.target.checked)}
-                  label="Pay at pickup"
-                  description="The customer pays in the shop when collecting the order."
-                  aria-invalid={!!fields["checkout.cashOnPickup"] || undefined}
-                />
-                {(fields["checkout.cashOnDelivery"] || fields["checkout.cashOnPickup"] || noPayment) && (
-                  <p className="text-[13px] text-danger" role="alert">
-                    {fields["checkout.cashOnDelivery"] ?? fields["checkout.cashOnPickup"] ?? "Enable at least one payment method — customers could not place orders otherwise."}
-                  </p>
-                )}
-                <p className="flex items-start gap-2 rounded-xl bg-info-50 px-4 py-3 text-[13px] text-info">
-                  <Banknote className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-                  Online card payments are not enabled; only cash on delivery / at pickup are available.
-                </p>
-              </fieldset>
-
-              <fieldset className="space-y-3 border-t border-line pt-5">
-                <legend className="sr-only">Ordering rules</legend>
-                <Checkbox
-                  id="st-checkout-guestCheckout"
-                  checked={form.checkout.guestCheckout}
-                  onChange={(e) => setCheckout("guestCheckout", e.target.checked)}
-                  label="Allow guest checkout"
-                  description="Customers can order without creating an account."
-                />
-                <Checkbox
-                  id="st-checkout-allowCustomerCancel"
-                  checked={form.checkout.allowCustomerCancel}
-                  onChange={(e) => setCheckout("allowCustomerCancel", e.target.checked)}
-                  label="Let customers cancel their own orders"
-                  description="Only while the order has not been confirmed yet."
-                />
-              </fieldset>
-
-              <div className="grid gap-4 border-t border-line pt-5 sm:grid-cols-[minmax(0,14rem)_1fr]">
-                <Field id="st-checkout-maxQuantityPerItem" label="Max quantity per item" required error={fields["checkout.maxQuantityPerItem"]} hint={qtyHint}>
+                <Field id="st-tagline" label={t("admin.settings.tagline")} optional error={fields.tagline}>
+                  <Input {...wire("tagline")} value={form.tagline} maxLength={160} onChange={(e) => setTop("tagline", e.target.value)} />
+                </Field>
+                <Field
+                  id="st-timeZone"
+                  label={t("admin.settings.timeZone")}
+                  required
+                  className="sm:col-span-2"
+                  error={fields.timeZone ?? (tzLooksInvalid ? t("admin.settings.timeZoneInvalid") : undefined)}
+                  hint={tzHint}
+                >
                   <Input
-                    {...wire("checkout.maxQuantityPerItem", qtyHint)}
-                    type="number"
-                    inputMode="numeric"
-                    min={1}
-                    max={99}
-                    step={1}
-                    value={form.checkout.maxQuantityPerItem}
-                    onChange={(e) => setCheckout("maxQuantityPerItem", e.target.value)}
-                  />
-                </Field>
-                <Field id="st-checkout-orderNotice" label="Checkout notice" optional error={fields["checkout.orderNotice"]} hint={noticeHint}>
-                  <Textarea
-                    {...wire("checkout.orderNotice", noticeHint)}
-                    rows={3}
-                    maxLength={500}
-                    value={form.checkout.orderNotice}
-                    onChange={(e) => setCheckout("orderNotice", e.target.value)}
+                    {...wire("timeZone", tzHint)}
+                    invalid={!!fields.timeZone || tzLooksInvalid}
+                    aria-describedby={fields.timeZone || tzLooksInvalid ? "st-timeZone-error" : "st-timeZone-hint"}
+                    value={form.timeZone}
+                    maxLength={64}
+                    autoComplete="off"
+                    spellCheck={false}
+                    placeholder="Asia/Yerevan"
+                    onChange={(e) => setTop("timeZone", e.target.value)}
                   />
                 </Field>
               </div>
-            </div>
-          </section>
-        </div>
+            </Panel>
+
+            <Panel title={t("admin.settings.contact")} description={t("admin.settings.contactHint")}>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field id="st-contact-phone" label={t("form.phone")} optional error={fields["contact.phone"]}>
+                  <Input {...wire("contact.phone")} type="tel" autoComplete="off" value={form.contact.phone} maxLength={32} onChange={(e) => setContact("phone", e.target.value)} />
+                </Field>
+                <Field id="st-contact-whatsapp" label={t("admin.settings.whatsapp")} optional error={fields["contact.whatsapp"]}>
+                  <Input {...wire("contact.whatsapp")} type="tel" autoComplete="off" value={form.contact.whatsapp} maxLength={32} onChange={(e) => setContact("whatsapp", e.target.value)} />
+                </Field>
+                <Field id="st-contact-email" label={t("form.email")} optional error={fields["contact.email"]} className="sm:col-span-2">
+                  <Input {...wire("contact.email")} type="email" autoComplete="off" value={form.contact.email} maxLength={254} onChange={(e) => setContact("email", e.target.value)} />
+                </Field>
+                <Field id="st-contact-address" label={t("admin.settings.address")} optional error={fields["contact.address"]} className="sm:col-span-2">
+                  <Input {...wire("contact.address")} value={form.contact.address} maxLength={300} onChange={(e) => setContact("address", e.target.value)} />
+                </Field>
+                <Field id="st-contact-hours" label={t("admin.settings.hours")} optional error={fields["contact.hours"]} hint={hoursHint}>
+                  <Textarea {...wire("contact.hours", hoursHint)} rows={3} value={form.contact.hours} maxLength={300} onChange={(e) => setContact("hours", e.target.value)} />
+                </Field>
+                <Field id="st-contact-mapUrl" label={t("admin.settings.mapLink")} optional error={fields["contact.mapUrl"]} hint={mapHint}>
+                  <Input {...wire("contact.mapUrl", mapHint)} type="url" inputMode="url" placeholder="https://" value={form.contact.mapUrl} maxLength={500} onChange={(e) => setContact("mapUrl", e.target.value)} />
+                </Field>
+              </div>
+            </Panel>
+
+            <Panel title={t("admin.settings.social")} description={t("admin.settings.socialHint")}>
+              <div className="grid gap-4 sm:grid-cols-3">
+                {(["instagram", "facebook", "telegram"] as const).map((k) => (
+                  <Field key={k} id={`st-social-${k}`} label={k === "instagram" ? "Instagram" : k === "facebook" ? "Facebook" : "Telegram"} optional error={fields[`social.${k}`]}>
+                    <Input {...wire(`social.${k}`)} type="url" inputMode="url" placeholder="https://" value={form.social[k]} maxLength={300} onChange={(e) => setSocial(k, e.target.value)} />
+                  </Field>
+                ))}
+              </div>
+            </Panel>
+
+            <section className="scroll-mt-24 rounded-2xl border border-line bg-paper" aria-labelledby="payments">
+              <div className="border-b border-line px-5 py-4">
+                <h2 id="payments" className="scroll-mt-24 flex items-center gap-2 font-sans text-[15px] font-semibold tracking-normal text-ink">
+                  <CreditCard className="h-4 w-4" aria-hidden="true" /> {t("admin.settings.checkout")}
+                </h2>
+                <p className="mt-0.5 text-[13px] text-ink-muted">{t("admin.settings.checkoutHint")}</p>
+              </div>
+              <div className="space-y-6 p-5">
+                <fieldset className="space-y-3">
+                  <legend className="mb-3 text-[13px] font-semibold text-ink">{t("admin.settings.paymentMethods")}</legend>
+                  <Checkbox
+                    id="st-checkout-cashOnDelivery"
+                    checked={form.checkout.cashOnDelivery}
+                    onChange={(e) => setCheckout("cashOnDelivery", e.target.checked)}
+                    label={t("admin.settings.cashOnDelivery")}
+                    description={t("admin.settings.cashOnDeliveryHint")}
+                    aria-invalid={!!fields["checkout.cashOnDelivery"] || undefined}
+                  />
+                  <Checkbox
+                    id="st-checkout-cashOnPickup"
+                    checked={form.checkout.cashOnPickup}
+                    onChange={(e) => setCheckout("cashOnPickup", e.target.checked)}
+                    label={t("admin.settings.cashOnPickup")}
+                    description={t("admin.settings.cashOnPickupHint")}
+                    aria-invalid={!!fields["checkout.cashOnPickup"] || undefined}
+                  />
+                  {(fields["checkout.cashOnDelivery"] || fields["checkout.cashOnPickup"] || noPayment) && (
+                    <p className="text-[13px] text-danger" role="alert">
+                      {fields["checkout.cashOnDelivery"] ?? fields["checkout.cashOnPickup"] ?? t("admin.settings.needPaymentMethodLong")}
+                    </p>
+                  )}
+                  <p className="flex items-start gap-2 rounded-xl bg-info-50 px-4 py-3 text-[13px] text-info">
+                    <Banknote className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+                    {t("admin.settings.noCardPayments")}
+                  </p>
+                </fieldset>
+
+                <fieldset className="space-y-3 border-t border-line pt-5">
+                  <legend className="sr-only">{t("admin.settings.orderingRules")}</legend>
+                  <Checkbox
+                    id="st-checkout-guestCheckout"
+                    checked={form.checkout.guestCheckout}
+                    onChange={(e) => setCheckout("guestCheckout", e.target.checked)}
+                    label={t("admin.settings.guestCheckout")}
+                    description={t("admin.settings.guestCheckoutHint")}
+                  />
+                  <Checkbox
+                    id="st-checkout-allowCustomerCancel"
+                    checked={form.checkout.allowCustomerCancel}
+                    onChange={(e) => setCheckout("allowCustomerCancel", e.target.checked)}
+                    label={t("admin.settings.customerCancel")}
+                    description={t("admin.settings.customerCancelHint")}
+                  />
+                </fieldset>
+
+                <div className="grid gap-4 border-t border-line pt-5 sm:grid-cols-[minmax(0,14rem)_1fr]">
+                  <Field id="st-checkout-maxQuantityPerItem" label={t("admin.settings.maxQty")} required error={fields["checkout.maxQuantityPerItem"]} hint={qtyHint}>
+                    <Input
+                      {...wire("checkout.maxQuantityPerItem", qtyHint)}
+                      type="number"
+                      inputMode="numeric"
+                      min={1}
+                      max={99}
+                      step={1}
+                      value={form.checkout.maxQuantityPerItem}
+                      onChange={(e) => setCheckout("maxQuantityPerItem", e.target.value)}
+                    />
+                  </Field>
+                  <Field id="st-checkout-orderNotice" label={t("admin.settings.notice")} optional error={fields["checkout.orderNotice"]} hint={noticeHint}>
+                    <Textarea
+                      {...wire("checkout.orderNotice", noticeHint)}
+                      rows={3}
+                      maxLength={500}
+                      value={form.checkout.orderNotice}
+                      onChange={(e) => setCheckout("orderNotice", e.target.value)}
+                    />
+                  </Field>
+                </div>
+              </div>
+            </section>
+          </div>
+        </TranslationTabs>
 
         <div className="min-w-0 space-y-6">
-          <Panel title={<span className="flex items-center gap-2"><Coins className="h-4 w-4" aria-hidden="true" /> Currency</span>}>
+          <Panel title={<span className="flex items-center gap-2"><Coins className="h-4 w-4" aria-hidden="true" /> {t("admin.settings.currency")}</span>}>
             <p className="flex items-baseline gap-2">
               <span className="text-2xl font-semibold text-ink">{currency}</span>
               <span className="text-lg text-ink-muted">{CURRENCIES[currency].symbol}</span>
             </p>
             <p className="mt-2 text-[13px] leading-relaxed text-ink-muted">
-              The store currency is fixed at setup. All prices and orders are stored in it, so changing the currency after orders exist is not supported.
+              {t("admin.settings.currencyHint")}
             </p>
           </Panel>
 
-          <Panel title={<span className="flex items-center gap-2"><Mail className="h-4 w-4" aria-hidden="true" /> Email delivery</span>}>
+          <Panel title={<span className="flex items-center gap-2"><Mail className="h-4 w-4" aria-hidden="true" /> {t("admin.settings.email")}</span>}>
             {emailConfigured ? (
               <div className="space-y-2 text-[13px] leading-relaxed text-ink-soft">
-                <Badge tone="success" dot>Configured</Badge>
+                <Badge tone="success" dot>{t("admin.settings.configured")}</Badge>
                 <p className="flex items-start gap-2">
                   <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-success" aria-hidden="true" />
-                  <span>Order confirmations, status updates and account emails are sent through your SMTP provider.</span>
+                  <span>{t("admin.settings.emailConfiguredHint")}</span>
                 </p>
               </div>
             ) : (
               <div className="space-y-3 text-[13px] leading-relaxed text-ink-soft">
-                <Badge tone="warning" dot>Not configured</Badge>
+                <Badge tone="warning" dot>{t("admin.settings.notConfigured")}</Badge>
                 <p className="flex items-start gap-2">
                   <MailWarning className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden="true" />
-                  <span>
-                    Emails are currently <strong className="font-semibold text-ink">not sent</strong>. Order and account emails are recorded as “skipped”.
-                  </span>
+                  <span>{t.rich("admin.settings.emailNotSent", { b: (c) => <strong className="font-semibold text-ink">{c}</strong> })}</span>
                 </p>
-                <p>To enable email, your developer or hosting provider must set these environment variables on the server:</p>
+                <p>{t("admin.settings.emailEnvHint")}</p>
                 <ul className="flex flex-wrap gap-1.5">
                   {SMTP_VARS.map((v) => (
                     <li key={v}>
@@ -318,10 +342,10 @@ export function SettingsForm({ initial, currency, emailConfigured }: { initial: 
 
       <div className="sticky bottom-0 z-10 -mx-1 flex flex-wrap items-center justify-end gap-3 rounded-2xl border border-line bg-paper/95 px-4 py-3 shadow-[0_-8px_24px_-16px_rgb(43_30_35/0.25)] backdrop-blur">
         <span className="mr-auto text-[13px] text-ink-muted" aria-live="polite">
-          {dirty ? "You have unsaved changes." : "All changes saved."}
+          {dirty ? t("admin.common.unsavedChanges") : t("admin.common.allSaved")}
         </span>
         <Button type="submit" loading={busy}>
-          Save settings
+          {t("admin.settings.save")}
         </Button>
       </div>
     </form>

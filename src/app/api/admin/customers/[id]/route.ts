@@ -7,7 +7,7 @@ export const GET = route<{ id: string }>(async (_req, ctx) => {
   await requirePermission("customers:read");
   const { id } = await ctx.params;
   const customer = await getCustomer(id);
-  if (!customer) throw ApiError.notFound("Customer not found.");
+  if (!customer) throw ApiError.notFound("server.notFound.customer");
   return ok(customer);
 });
 
@@ -15,7 +15,7 @@ export const GET = route<{ id: string }>(async (_req, ctx) => {
 export const PATCH = route<{ id: string }>(async (req, ctx) => {
   const user = await requirePermission("settings:manage");
   const { id } = await ctx.params;
-  assertObjectId(id, "Customer");
+  assertObjectId(id, "customer");
   const { status } = await readJson(req, z.object({ status: z.enum(["active", "disabled"]) }));
   await setCustomerStatus(id, status, user);
   return ok({ status });

@@ -4,8 +4,10 @@ import { useId, useState } from "react";
 import { ArrowRight, Check } from "lucide-react";
 import { api, errorMessage, fieldErrors } from "@/lib/client/api";
 import { cn } from "@/lib/cn";
+import { useT } from "@/i18n/client";
 
 export function NewsletterForm({ tone = "dark", source = "footer" }: { tone?: "dark" | "light"; source?: string }) {
+  const t = useT();
   const id = useId();
   const [email, setEmail] = useState("");
   const [state, setState] = useState<"idle" | "loading" | "done">("idle");
@@ -27,7 +29,7 @@ export function NewsletterForm({ tone = "dark", source = "footer" }: { tone?: "d
   if (state === "done") {
     return (
       <p role="status" className={cn("flex items-center gap-2 text-sm", tone === "dark" ? "text-ivory" : "text-ink")}>
-        <Check className="h-4 w-4" /> Thank you — you are on the list.
+        <Check className="h-4 w-4" /> {t("newsletter.success")}
       </p>
     );
   }
@@ -35,7 +37,7 @@ export function NewsletterForm({ tone = "dark", source = "footer" }: { tone?: "d
   return (
     <form onSubmit={submit} noValidate className="w-full max-w-sm">
       <label htmlFor={id} className="sr-only">
-        Email address
+        {t("newsletter.emailLabel")}
       </label>
       <div
         className={cn(
@@ -50,7 +52,7 @@ export function NewsletterForm({ tone = "dark", source = "footer" }: { tone?: "d
           autoComplete="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          placeholder="Your email address"
+          placeholder={t("newsletter.placeholder")}
           aria-invalid={Boolean(error) || undefined}
           aria-describedby={error ? `${id}-error` : undefined}
           className={cn("min-w-0 flex-1 bg-transparent text-[15px] focus:outline-none", tone === "dark" ? "text-ivory placeholder:text-ivory/50" : "text-ink placeholder:text-ink-muted")}
@@ -62,7 +64,7 @@ export function NewsletterForm({ tone = "dark", source = "footer" }: { tone?: "d
             "inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition-colors disabled:opacity-60",
             tone === "dark" ? "bg-ivory text-brand hover:bg-cream" : "bg-brand text-white hover:bg-brand-hover",
           )}
-          aria-label="Subscribe"
+          aria-label={t("newsletter.subscribe")}
         >
           <ArrowRight className="h-4 w-4" />
         </button>

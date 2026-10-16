@@ -1,5 +1,5 @@
 import { CURRENCY_CODES } from "@/lib/domain/money";
-import { defineSchema, getModel, ObjectId, type Id } from "./_util";
+import { defineSchema, getModel, i18nField, ObjectId, type I18nOverrides, type Id } from "./_util";
 
 /** Singleton document (_id: "store") holding business configuration and editable content. */
 const settingsSchema = defineSchema(
@@ -50,9 +50,52 @@ const settingsSchema = defineSchema(
       returns: { type: String, default: "", maxlength: 20000 },
       reviewedAt: { type: Date, default: null },
     },
+    i18n: i18nField({
+      tagline: 160,
+      contactAddress: 300,
+      contactHours: 300,
+      orderNotice: 500,
+      announcement: 160,
+      heroEyebrow: 80,
+      heroTitle: 120,
+      heroSubtitle: 300,
+      heroImageAlt: 200,
+      storyTitle: 120,
+      storyBody: 3000,
+      storyImageAlt: 200,
+      aboutBody: 6000,
+      deliveryInfo: 3000,
+      privacy: 20000,
+      terms: 20000,
+      returns: 20000,
+    }),
   },
   { timestamps: true, _id: false },
 );
+
+/**
+ * Translatable store text, flattened: tagline, contact address/hours, the checkout notice,
+ * every `content` text field and the legal pages.
+ */
+export type SettingsText = {
+  tagline: string;
+  contactAddress: string;
+  contactHours: string;
+  orderNotice: string;
+  announcement: string;
+  heroEyebrow: string;
+  heroTitle: string;
+  heroSubtitle: string;
+  heroImageAlt: string;
+  storyTitle: string;
+  storyBody: string;
+  storyImageAlt: string;
+  aboutBody: string;
+  deliveryInfo: string;
+  privacy: string;
+  terms: string;
+  returns: string;
+};
 
 export interface SettingsDoc {
   _id: string;
@@ -85,6 +128,7 @@ export interface SettingsDoc {
     deliveryInfo: string;
   };
   legal: { privacy: string; terms: string; returns: string; reviewedAt: Date | null };
+  i18n?: I18nOverrides<SettingsText>;
   updatedAt?: Date;
 }
 export const Settings = getModel<SettingsDoc>("Settings", settingsSchema);
@@ -97,6 +141,7 @@ const galleryItemSchema = defineSchema(
     link: { type: String, maxlength: 300, default: "" },
     sortOrder: { type: Number, default: 0 },
     isActive: { type: Boolean, default: true },
+    i18n: i18nField({ alt: 200, caption: 200 }),
     isSample: { type: Boolean, default: false },
   },
   { timestamps: true },
@@ -109,6 +154,7 @@ export interface GalleryItemDoc {
   link: string;
   sortOrder: number;
   isActive: boolean;
+  i18n?: I18nOverrides<{ alt: string; caption: string }>;
   isSample: boolean;
 }
 export const GalleryItem = getModel<GalleryItemDoc>("GalleryItem", galleryItemSchema);

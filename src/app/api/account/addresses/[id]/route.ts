@@ -5,7 +5,7 @@ import { deleteAddress, saveAddress } from "@/lib/services/account";
 export const PUT = route<{ id: string }>(async (req, ctx) => {
   const user = await requireUser();
   const { id } = await ctx.params;
-  assertObjectId(id, "Address");
+  assertObjectId(id, "address");
   const input = await readJson(req, addressSchema);
   return ok(await saveAddress(user.id, input, id));
 });
@@ -13,6 +13,6 @@ export const PUT = route<{ id: string }>(async (req, ctx) => {
 export const DELETE = route<{ id: string }>(async (_req, ctx) => {
   const user = await requireUser();
   const { id } = await ctx.params;
-  assertObjectId(id, "Address");
+  assertObjectId(id, "address");
   return ok(await deleteAddress(user.id, id));
 });

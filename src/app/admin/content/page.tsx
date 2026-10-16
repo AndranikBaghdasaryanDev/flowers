@@ -1,5 +1,5 @@
 import { Suspense } from "react";
-import Link from "next/link";
+import { Link } from "@/i18n/client";
 import { connection } from "next/server";
 import { ChevronRight, Scale } from "lucide-react";
 import { requireStaffPage } from "@/lib/auth/guards";
@@ -11,13 +11,17 @@ import { mediaUrl } from "@/lib/media-url";
 import { AdminPageHeader, NoAccess } from "@/components/admin/ui";
 import { ContentForm, type ContentFormValues } from "./content-form";
 import { GalleryManager } from "./gallery-manager";
+import { getAdminI18n } from "@/i18n/server";
 
-export const metadata = { title: "Gallery & content" };
+export async function generateMetadata() {
+  const { t } = await getAdminI18n();
+  return { title: t("admin.nav.content") };
+}
 
 /** Raw (owner-written) content — empty fields stay empty so the form never shows fallback copy as if it were saved. */
 async function loadRawContent(): Promise<ContentFormValues> {
   await connectDb();
-  const doc = await Settings.findById("store").select("content").lean<Pick<SettingsDoc, "content">>();
+  const doc = await Settings.findById("store").select("content i18n").lean<Pick<SettingsDoc, "content" | "i18n">>();
   const c = doc?.content;
   const heroId = c?.heroImage ? String(c.heroImage) : null;
   const storyId = c?.storyImage ? String(c.storyImage) : null;
@@ -34,20 +38,22 @@ async function loadRawContent(): Promise<ContentFormValues> {
     storyImageAlt: c?.storyImageAlt ?? "",
     aboutBody: c?.aboutBody ?? "",
     deliveryInfo: c?.deliveryInfo ?? "",
+    i18n: doc?.i18n ?? {},
   };
 }
 
 async function ContentContent() {
   await connection();
   const { allowed } = await requireStaffPage("/admin/content", "content:manage");
-  if (!allowed) return <NoAccess what="content" />;
+  const { t } = await getAdminI18n();
+  if (!allowed) return <NoAccess what={t("admin.nav.content")} />;
   const [content, gallery] = await Promise.all([loadRawContent(), listGallery(false)]);
 
   return (
     <>
       <AdminPageHeader
-        title="Gallery & content"
-        description="Homepage copy and imagery, the About and Delivery page texts, and the photo gallery."
+        title={t("admin.nav.content")}
+        description={t("admin.content.description")}
       />
       <div className="space-y-8">
         <ContentForm initial={content} defaults={CONTENT_DEFAULTS} />
@@ -60,8 +66,8 @@ async function ContentContent() {
             <Scale className="h-5 w-5" aria-hidden="true" />
           </span>
           <span className="min-w-0 flex-1">
-            <span className="block font-semibold text-ink group-hover:text-brand">Legal pages</span>
-            <span className="block text-[13px] text-ink-muted">Edit the privacy policy, terms & conditions and cancellations & returns texts.</span>
+            <span className="block font-semibold text-ink group-hover:text-brand">{t("admin.legal.title")}</span>
+            <span className="block text-[13px] text-ink-muted">{t("admin.legal.linkText")}</span>
           </span>
           <ChevronRight className="h-5 w-5 shrink-0 text-ink-muted group-hover:text-brand" aria-hidden="true" />
         </Link>

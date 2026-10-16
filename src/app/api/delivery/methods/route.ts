@@ -1,12 +1,14 @@
 import { ok, route } from "@/lib/api/handler";
+import { getRequestLocale } from "@/i18n/server";
 import { availableSchedule, listActiveDeliveryMethods } from "@/lib/services/delivery";
 import { getSettings } from "@/lib/services/settings";
 
 /** Active delivery/pickup methods with the dates and time windows currently bookable. */
 export const GET = route(async () => {
-  const settings = await getSettings();
+  const locale = await getRequestLocale();
+  const settings = await getSettings(locale);
   const now = new Date();
-  const methods = await listActiveDeliveryMethods();
+  const methods = await listActiveDeliveryMethods(locale);
   return ok({
     timeZone: settings.timeZone,
     currency: settings.currency,

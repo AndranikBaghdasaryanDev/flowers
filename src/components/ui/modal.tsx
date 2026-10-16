@@ -3,6 +3,7 @@
 import { useEffect, useId, useRef, type ReactNode } from "react";
 import { X } from "lucide-react";
 import { cn } from "@/lib/cn";
+import { useT } from "@/i18n/client";
 
 /**
  * Accessible modal built on the native <dialog> element (focus trapping, Escape
@@ -29,6 +30,7 @@ export function Modal({
   size?: "sm" | "md" | "lg" | "xl";
   className?: string;
 }) {
+  const t = useT();
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
   const descId = useId();
@@ -98,7 +100,7 @@ export function Modal({
               type="button"
               onClick={onClose}
               className="-mr-2 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-ink-soft transition-colors hover:bg-cream hover:text-ink"
-              aria-label="Close"
+              aria-label={t("common.close")}
             >
               <X className="h-5 w-5" />
             </button>
@@ -118,7 +120,7 @@ export function ConfirmDialog({
   onConfirm,
   title,
   description,
-  confirmLabel = "Confirm",
+  confirmLabel,
   tone = "danger",
   loading,
   children,
@@ -133,6 +135,7 @@ export function ConfirmDialog({
   loading?: boolean;
   children?: ReactNode;
 }) {
+  const t = useT();
   return (
     <Modal
       open={open}
@@ -142,7 +145,7 @@ export function ConfirmDialog({
       footer={
         <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
           <button type="button" onClick={onClose} className="h-11 rounded-full px-5 text-sm font-semibold text-ink hover:bg-cream">
-            Cancel
+            {t("common.cancel")}
           </button>
           <button
             type="button"
@@ -153,7 +156,7 @@ export function ConfirmDialog({
               tone === "danger" ? "bg-danger hover:bg-[#8c1c17]" : "bg-brand hover:bg-brand-hover",
             )}
           >
-            {loading ? "Working…" : confirmLabel}
+            {loading ? t("common.working") : (confirmLabel ?? t("common.confirm"))}
           </button>
         </div>
       }

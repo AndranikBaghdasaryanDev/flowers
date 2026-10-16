@@ -5,7 +5,7 @@ import { Readable } from "node:stream";
 import { connectDb } from "@/lib/db";
 import { env } from "@/lib/env";
 import { Media, type MediaDoc } from "@/lib/models/catalog";
-import { ApiError } from "@/lib/api/errors";
+import { ApiError, msg } from "@/lib/api/errors";
 
 const BUCKET = "media";
 const ACCEPTED_FORMATS = new Set(["jpeg", "png", "webp", "avif", "heif", "gif", "tiff"]);
@@ -32,22 +32,22 @@ export async function storeImage(
   input: Buffer,
   opts: { filename: string; purpose: MediaPurpose; alt?: string; uploadedBy?: string | null; isSample?: boolean },
 ): Promise<StoredMedia> {
-  if (input.length === 0) throw ApiError.validation("The file is empty.");
+  if (input.length === 0) throw ApiError.validation("server.errors.fileEmpty");
   if (input.length > env.maxUploadBytes) {
-    throw new ApiError(413, "payload_too_large", `Images must be smaller than ${Math.round(env.maxUploadBytes / 1024 / 1024)} MB.`);
+    throw new ApiError(413, "payload_too_large", msg("server.errors.imageTooLarge", { mb: Math.round(env.maxUploadBytes / 1024 / 1024) }));
   }
 
   let meta: Metadata;
   try {
     meta = await sharp(input, { limitInputPixels: MAX_INPUT_PIXELS }).metadata();
   } catch {
-    throw new ApiError(415, "unsupported_media_type", "This file is not a valid image. Use JPEG, PNG, WebP or AVIF.");
+    throw new ApiError(415, "unsupported_media_type", "server.errors.invalidImage");
   }
   if (!meta.format || !ACCEPTED_FORMATS.has(meta.format)) {
-    throw new ApiError(415, "unsupported_media_type", "Unsupported image format. Use JPEG, PNG, WebP or AVIF.");
+    throw new ApiError(415, "unsupported_media_type", "server.errors.unsupportedImage");
   }
   if (!meta.width || !meta.height || meta.width < 200 || meta.height < 200) {
-    throw ApiError.validation("Images must be at least 200 × 200 pixels.");
+    throw ApiError.validation("server.errors.imageTooSmall");
   }
 
   let output: { data: Buffer; info: OutputInfo };
@@ -58,7 +58,7 @@ export async function storeImage(
       .webp({ quality: 84, effort: 4 })
       .toBuffer({ resolveWithObject: true });
   } catch {
-    throw new ApiError(415, "unsupported_media_type", "The image could not be processed.");
+    throw new ApiError(415, "unsupported_media_type", "server.errors.imageProcessing");
   }
 
   const safeName = opts.filename.replace(/[^\w.\- ]+/g, "").slice(0, 120).replace(/\.[^.]+$/, "") || "image";
@@ -66,7 +66,7 @@ export async function storeImage(
   try {
     b = await bucket();
   } catch (error) {
-    throw new ApiError(503, "service_unavailable", "Image storage is temporarily unavailable. Please try again.", undefined, {
+    throw new ApiError(503, "service_unavailable", "server.errors.storageUnavailable", undefined, {
       cause: String(error),
     });
   }

@@ -6,6 +6,7 @@ import { AlertCircle, ImagePlus, RefreshCw, Trash2 } from "lucide-react";
 import { Spinner } from "@/components/ui/spinner";
 import { api, errorMessage } from "@/lib/client/api";
 import { cn } from "@/lib/cn";
+import { useT } from "@/i18n/client";
 
 export type PickedImage = { id: string; src: string; width: number; height: number };
 
@@ -41,6 +42,7 @@ export function ImagePicker({
   error?: string;
   className?: string;
 }) {
+  const t = useT();
   const inputId = useId();
   const statusId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -53,11 +55,11 @@ export function ImagePicker({
   const upload = async (file: File) => {
     setUploadError(null);
     if (file.type && !ACCEPTED_TYPES.has(file.type)) {
-      setUploadError("This file type is not supported. Use JPEG, PNG, WebP or AVIF.");
+      setUploadError(t("admin.media.typeNotSupported"));
       return;
     }
     if (file.size > MAX_BYTES) {
-      setUploadError(`This image is ${(file.size / 1024 / 1024).toFixed(1)} MB. Images must be smaller than 8 MB.`);
+      setUploadError(t("admin.media.sizeTooLarge", { size: (file.size / 1024 / 1024).toFixed(1) }));
       return;
     }
     setBusy(true);
@@ -112,18 +114,18 @@ export function ImagePicker({
             className="flex h-full w-full flex-col items-center justify-center gap-2 px-4 text-center text-ink-muted transition-colors hover:bg-brand-50/40 hover:text-brand focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand"
           >
             <ImagePlus className="h-7 w-7" aria-hidden="true" />
-            <span className="text-sm font-semibold">Upload image</span>
-            <span className="text-xs">JPEG, PNG, WebP or AVIF · up to 8 MB</span>
+            <span className="text-sm font-semibold">{t("admin.media.upload")}</span>
+            <span className="text-xs">{t("admin.media.formats")}</span>
           </button>
         )}
         {busy && (
           <div className="absolute inset-0 flex items-center justify-center gap-2 bg-paper/75 text-sm font-semibold text-ink">
-            <Spinner className="h-5 w-5 text-brand" /> Uploading…
+            <Spinner className="h-5 w-5 text-brand" /> {t("admin.media.uploading")}
           </div>
         )}
       </div>
       <p id={statusId} className="sr-only" role="status" aria-live="polite">
-        {busy ? "Uploading image" : value ? "Image selected" : "No image selected"}
+        {busy ? t("admin.media.uploadingImage") : value ? t("admin.media.selected") : t("admin.media.noneSelected")}
       </p>
       {value && (
         <div className="flex flex-wrap gap-2 pt-1">
@@ -133,7 +135,7 @@ export function ImagePicker({
             disabled={busy}
             className="inline-flex h-9 items-center gap-1.5 rounded-full border border-line-strong px-4 text-[13px] font-semibold text-ink transition-colors hover:border-brand hover:text-brand disabled:opacity-50"
           >
-            <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" /> Replace
+            <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" /> {t("admin.media.replace")}
           </button>
           <button
             type="button"
@@ -144,7 +146,7 @@ export function ImagePicker({
             disabled={busy}
             className="inline-flex h-9 items-center gap-1.5 rounded-full px-4 text-[13px] font-semibold text-ink-soft transition-colors hover:bg-danger-50 hover:text-danger disabled:opacity-50"
           >
-            <Trash2 className="h-3.5 w-3.5" aria-hidden="true" /> Remove
+            <Trash2 className="h-3.5 w-3.5" aria-hidden="true" /> {t("admin.media.remove")}
           </button>
         </div>
       )}

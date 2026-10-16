@@ -5,7 +5,7 @@ export function ImageFallback({ label, className }: { label?: string; className?
   return (
     <div
       role={label ? "img" : undefined}
-      aria-label={label ? `${label} — photo coming soon` : undefined}
+      aria-label={label || undefined}
       className={cn("absolute inset-0 flex items-center justify-center bg-gradient-to-br from-cream via-brand-50 to-sand", className)}
     >
       <svg viewBox="0 0 120 160" className="h-2/5 w-auto text-brand/25" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true">

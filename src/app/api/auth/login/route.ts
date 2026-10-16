@@ -1,8 +1,9 @@
 import { ok, readJson, route } from "@/lib/api/handler";
+import { getRequestLocale } from "@/i18n/server";
 import { loginSchema } from "@/lib/validation";
 import { loginUser } from "@/lib/services/auth";
 
 export const POST = route(async (req) => {
   const input = await readJson(req, loginSchema);
-  return ok(await loginUser(input));
+  return ok(await loginUser(input, await getRequestLocale()));
 });

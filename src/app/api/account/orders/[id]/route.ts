@@ -7,6 +7,6 @@ export const GET = route<{ id: string }>(async (_req, ctx) => {
   const user = await requireUser();
   const { id } = await ctx.params;
   const order = await getOrderForUser(id, user);
-  if (!order) throw ApiError.notFound("Order not found.");
+  if (!order) throw ApiError.notFound("server.notFound.order");
   return ok(order, { headers: { "Cache-Control": "no-store" } });
 });

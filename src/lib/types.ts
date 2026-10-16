@@ -68,8 +68,11 @@ export type DeliveryMethodDTO = {
   fee: number;
   freeOverAmount: number | null;
   minOrderAmount: number;
-  zones: { name: string; fee: number | null }[];
+  /** `aliases`: the area name in every language, so a translated name is accepted at checkout. */
+  zones: { name: string; fee: number | null; aliases?: string[] }[];
   city: string;
+  /** The city name in every language. */
+  cityAliases?: string[];
   estimatedTime: string;
   leadTimeMinutes: number;
   maxDaysAhead: number;

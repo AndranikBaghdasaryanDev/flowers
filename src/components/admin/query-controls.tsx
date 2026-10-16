@@ -6,6 +6,9 @@ import { useTransition } from "react";
 import { Search } from "lucide-react";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/cn";
+import { useT } from "@/i18n/client";
+import type { MessageKey } from "@/i18n/translate";
+import type { Messages } from "@/i18n/messages";
 
 /** Updates URL query params (resetting pagination) for server-rendered admin lists. */
 export function useQueryUpdater() {
@@ -76,23 +79,24 @@ export function SelectFilter({ param, label, options }: { param: string; label: 
   );
 }
 
-const RANGES = [
-  { value: "", label: "All time" },
-  { value: "today", label: "Today" },
-  { value: "yesterday", label: "Yesterday" },
-  { value: "7d", label: "Last 7 days" },
-  { value: "30d", label: "Last 30 days" },
-  { value: "custom", label: "Custom" },
+const RANGES: { value: string; label: MessageKey<Messages> }[] = [
+  { value: "", label: "admin.common.range.all" },
+  { value: "today", label: "admin.common.range.today" },
+  { value: "yesterday", label: "admin.common.range.yesterday" },
+  { value: "7d", label: "admin.common.range.last7" },
+  { value: "30d", label: "admin.common.range.last30" },
+  { value: "custom", label: "admin.common.range.custom" },
 ];
 
 export function DateRangeFilter({ withDateField }: { withDateField?: boolean }) {
+  const t = useT();
   const { update, params } = useQueryUpdater();
   const range = params.get("range") ?? "";
   const [from, setFrom] = useSyncedState(params.get("from") ?? "");
   const [to, setTo] = useSyncedState(params.get("to") ?? "");
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <div className="flex flex-wrap gap-1 rounded-full border border-line bg-paper p-1" role="group" aria-label="Date range">
+      <div className="flex flex-wrap gap-1 rounded-full border border-line bg-paper p-1" role="group" aria-label={t("admin.common.range.label")}>
         {RANGES.map((r) => (
           <button
             key={r.value}
@@ -101,7 +105,7 @@ export function DateRangeFilter({ withDateField }: { withDateField?: boolean }) 
             onClick={() => update({ range: r.value || null, ...(r.value !== "custom" ? { from: null, to: null } : {}) })}
             className={cn("rounded-full px-3 py-1.5 text-[12.5px] font-semibold transition-colors", range === r.value ? "bg-brand text-white" : "text-ink-soft hover:text-brand")}
           >
-            {r.label}
+            {t(r.label)}
           </button>
         ))}
       </div>
@@ -113,11 +117,11 @@ export function DateRangeFilter({ withDateField }: { withDateField?: boolean }) 
             update({ from: from || null, to: to || null });
           }}
         >
-          <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} aria-label="From date" className="h-10 rounded-full border border-line bg-paper px-3 text-[13px]" />
+          <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} aria-label={t("admin.common.range.from")} className="h-10 rounded-full border border-line bg-paper px-3 text-[13px]" />
           <span className="text-ink-muted">–</span>
-          <input type="date" value={to} onChange={(e) => setTo(e.target.value)} aria-label="To date" className="h-10 rounded-full border border-line bg-paper px-3 text-[13px]" />
+          <input type="date" value={to} onChange={(e) => setTo(e.target.value)} aria-label={t("admin.common.range.to")} className="h-10 rounded-full border border-line bg-paper px-3 text-[13px]" />
           <button type="submit" className="h-10 rounded-full bg-ink px-4 text-[13px] font-semibold text-ivory hover:bg-brand">
-            Apply
+            {t("admin.common.apply")}
           </button>
         </form>
       )}
@@ -125,11 +129,11 @@ export function DateRangeFilter({ withDateField }: { withDateField?: boolean }) 
         <select
           value={params.get("dateField") ?? "created"}
           onChange={(e) => update({ dateField: e.target.value === "created" ? null : e.target.value })}
-          aria-label="Date applies to"
+          aria-label={t("admin.common.range.dateField")}
           className="h-10 rounded-full border border-line bg-paper px-3 text-[12.5px] font-semibold"
         >
-          <option value="created">by order date</option>
-          <option value="delivery">by delivery date</option>
+          <option value="created">{t("admin.common.range.byOrderDate")}</option>
+          <option value="delivery">{t("admin.common.range.byDeliveryDate")}</option>
         </select>
       )}
     </div>

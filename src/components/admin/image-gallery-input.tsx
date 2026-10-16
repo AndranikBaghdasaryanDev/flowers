@@ -5,6 +5,9 @@ import { useId, useRef, useState } from "react";
 import { ImagePlus, Trash2, ArrowLeft, ArrowRight, Star, AlertCircle } from "lucide-react";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/cn";
+import { useT } from "@/i18n/client";
+
+type UploadErrors = { failed: (status: number) => string; network: string };
 
 export type GalleryImage = { media: string; alt: string; src: string; width: number; height: number };
 
@@ -14,7 +17,7 @@ const MAX_BYTES = 8 * 1024 * 1024;
 const ACCEPT = "image/jpeg,image/png,image/webp,image/avif";
 
 /** Uploads one file with progress reporting (XMLHttpRequest exposes upload progress; fetch does not). */
-function uploadWithProgress(file: File, purpose: string, alt: string, onProgress: (p: number) => void): Promise<{ id: string; url: string; width: number; height: number }> {
+function uploadWithProgress(file: File, purpose: string, alt: string, onProgress: (p: number) => void, errors: UploadErrors): Promise<{ id: string; url: string; width: number; height: number }> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     const form = new FormData();
@@ -31,9 +34,9 @@ function uploadWithProgress(file: File, purpose: string, alt: string, onProgress
         // ignore
       }
       if (xhr.status >= 200 && xhr.status < 300 && body.data) resolve(body.data);
-      else reject(new Error(body.error?.message ?? `Upload failed (${xhr.status}).`));
+      else reject(new Error(body.error?.message ?? errors.failed(xhr.status)));
     };
-    xhr.onerror = () => reject(new Error("Network error — the image could not be uploaded."));
+    xhr.onerror = () => reject(new Error(errors.network));
     xhr.send(form);
   });
 }
@@ -58,6 +61,7 @@ export function ImageGalleryInput({
   defaultAlt?: string;
   error?: string;
 }) {
+  const t = useT();
   const inputId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploads, setUploads] = useState<Upload[]>([]);
@@ -71,16 +75,19 @@ export function ImageGalleryInput({
     for (const file of list) {
       const key = `${file.name}-${file.size}-${Math.random()}`;
       if (file.size > MAX_BYTES) {
-        setUploads((u) => [...u, { key, name: file.name, progress: 0, error: "File is larger than 8 MB." }]);
+        setUploads((u) => [...u, { key, name: file.name, progress: 0, error: t("admin.media.tooLarge") }]);
         continue;
       }
       if (!ACCEPT.split(",").includes(file.type)) {
-        setUploads((u) => [...u, { key, name: file.name, progress: 0, error: "Use a JPEG, PNG, WebP or AVIF image." }]);
+        setUploads((u) => [...u, { key, name: file.name, progress: 0, error: t("admin.media.wrongType") }]);
         continue;
       }
       setUploads((u) => [...u, { key, name: file.name, progress: 0 }]);
       try {
-        const res = await uploadWithProgress(file, purpose, defaultAlt, (p) => setUploads((u) => u.map((x) => (x.key === key ? { ...x, progress: p } : x))));
+        const res = await uploadWithProgress(file, purpose, defaultAlt, (p) => setUploads((u) => u.map((x) => (x.key === key ? { ...x, progress: p } : x))), {
+          failed: (status) => t("admin.media.uploadFailedStatus", { status: String(status) }),
+          network: t("admin.media.networkError"),
+        });
         onChange([...latest.current, { media: res.id, src: res.url, width: res.width, height: res.height, alt: defaultAlt }]);
         setUploads((u) => u.filter((x) => x.key !== key));
       } catch (e) {
@@ -105,36 +112,36 @@ export function ImageGalleryInput({
         {value.map((img, i) => (
           <li key={img.media} className={cn("overflow-hidden rounded-2xl border bg-ivory", i === 0 ? "border-brand" : "border-line")}>
             <div className="relative aspect-[4/5] bg-cream">
-              <Image src={img.src} alt={img.alt || "Product image"} fill sizes="200px" className="object-cover" />
-              {i === 0 && <span className="absolute left-2 top-2 rounded-full bg-brand px-2 py-0.5 text-[10.5px] font-bold uppercase tracking-wider text-white">Primary</span>}
+              <Image src={img.src} alt={img.alt || t("admin.media.productImage")} fill sizes="200px" className="object-cover" />
+              {i === 0 && <span className="absolute left-2 top-2 rounded-full bg-brand px-2 py-0.5 text-[10.5px] font-bold uppercase tracking-wider text-white">{t("admin.media.primary")}</span>}
             </div>
             <div className="space-y-2 p-2.5">
               <label className="sr-only" htmlFor={`${inputId}-alt-${i}`}>
-                Alt text for image {i + 1}
+                {t("admin.media.altFor", { n: i + 1 })}
               </label>
               <input
                 id={`${inputId}-alt-${i}`}
                 value={img.alt}
                 maxLength={300}
-                placeholder="Describe the image"
+                placeholder={t("admin.media.describe")}
                 onChange={(e) => onChange(value.map((v, k) => (k === i ? { ...v, alt: e.target.value } : v)))}
                 className={cn("h-9 w-full rounded-lg border bg-paper px-2.5 text-[13px] focus:border-brand focus:outline-none", img.alt.trim().length < 3 ? "border-warning" : "border-line")}
               />
               <div className="flex items-center justify-between">
                 <div className="flex">
-                  <button type="button" onClick={() => move(i, -1)} disabled={i === 0} className="rounded-md p-1.5 text-ink-muted hover:bg-cream hover:text-ink disabled:opacity-30" aria-label={`Move image ${i + 1} left`}>
+                  <button type="button" onClick={() => move(i, -1)} disabled={i === 0} className="rounded-md p-1.5 text-ink-muted hover:bg-cream hover:text-ink disabled:opacity-30" aria-label={t("admin.media.moveLeft", { n: i + 1 })}>
                     <ArrowLeft className="h-4 w-4" />
                   </button>
-                  <button type="button" onClick={() => move(i, 1)} disabled={i === value.length - 1} className="rounded-md p-1.5 text-ink-muted hover:bg-cream hover:text-ink disabled:opacity-30" aria-label={`Move image ${i + 1} right`}>
+                  <button type="button" onClick={() => move(i, 1)} disabled={i === value.length - 1} className="rounded-md p-1.5 text-ink-muted hover:bg-cream hover:text-ink disabled:opacity-30" aria-label={t("admin.media.moveRight", { n: i + 1 })}>
                     <ArrowRight className="h-4 w-4" />
                   </button>
                   {i > 0 && (
-                    <button type="button" onClick={() => makePrimary(i)} className="rounded-md p-1.5 text-ink-muted hover:bg-cream hover:text-brand" aria-label={`Make image ${i + 1} the primary image`} title="Make primary">
+                    <button type="button" onClick={() => makePrimary(i)} className="rounded-md p-1.5 text-ink-muted hover:bg-cream hover:text-brand" aria-label={t("admin.media.makePrimaryAria", { n: i + 1 })} title={t("admin.media.makePrimary")}>
                       <Star className="h-4 w-4" />
                     </button>
                   )}
                 </div>
-                <button type="button" onClick={() => onChange(value.filter((_, k) => k !== i))} className="rounded-md p-1.5 text-ink-muted hover:bg-danger-50 hover:text-danger" aria-label={`Remove image ${i + 1}`}>
+                <button type="button" onClick={() => onChange(value.filter((_, k) => k !== i))} className="rounded-md p-1.5 text-ink-muted hover:bg-danger-50 hover:text-danger" aria-label={t("admin.media.removeN", { n: i + 1 })}>
                   <Trash2 className="h-4 w-4" />
                 </button>
               </div>
@@ -149,14 +156,14 @@ export function ImageGalleryInput({
                 <p className="mt-2 line-clamp-2 text-[12px] font-semibold text-ink">{u.name}</p>
                 <p className="mt-1 text-[12px] text-danger">{u.error}</p>
                 <button type="button" onClick={() => setUploads((x) => x.filter((y) => y.key !== u.key))} className="mt-2 text-[12px] font-semibold underline">
-                  Dismiss
+                  {t("common.dismiss")}
                 </button>
               </>
             ) : (
               <>
                 <Spinner className="h-5 w-5 text-brand" />
                 <p className="mt-2 line-clamp-2 text-[12px] text-ink-soft">{u.name}</p>
-                <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-line" role="progressbar" aria-valuenow={u.progress} aria-valuemin={0} aria-valuemax={100} aria-label={`Uploading ${u.name}`}>
+                <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-line" role="progressbar" aria-valuenow={u.progress} aria-valuemin={0} aria-valuemax={100} aria-label={t("admin.media.uploadingName", { name: u.name })}>
                   <div className="h-full bg-brand transition-all" style={{ width: `${u.progress}%` }} />
                 </div>
               </>
@@ -175,8 +182,8 @@ export function ImageGalleryInput({
               }}
             >
               <ImagePlus className="h-6 w-6" />
-              <span className="mt-2 text-[13px] font-semibold">{max === 1 ? "Upload image" : "Add images"}</span>
-              <span className="mt-1 px-3 text-[11.5px]">JPEG, PNG, WebP · max 8 MB</span>
+              <span className="mt-2 text-[13px] font-semibold">{max === 1 ? t("admin.media.upload") : t("admin.media.addImages")}</span>
+              <span className="mt-1 px-3 text-[11.5px]">{t("admin.media.formatsShort")}</span>
               <input ref={inputRef} id={inputId} type="file" accept={ACCEPT} multiple={max > 1} className="sr-only" onChange={(e) => void onFiles(e.target.files)} />
             </label>
           </li>

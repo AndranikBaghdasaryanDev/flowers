@@ -6,6 +6,8 @@ import { Order } from "@/lib/models/order";
 import { mediaInfoMap, type MediaInfo } from "@/lib/services/media";
 import { getSettings, type StoreSettings } from "@/lib/services/settings";
 import { toMinor } from "@/lib/domain/money";
+import { overridesFor, pickAt, pickList, pickText } from "@/lib/localize";
+import type { Locale } from "@/i18n/config";
 import type {
   CategoryDTO,
   CategoryRef,
@@ -71,23 +73,26 @@ export function invalidateBestsellers() {
 
 type CategoryLookup = Map<string, { ref: CategoryRef; isActive: boolean }>;
 
-async function categoryLookup(): Promise<CategoryLookup> {
-  const cats = await Category.find().select("name slug kind isActive").lean();
+async function categoryLookup(locale?: Locale): Promise<CategoryLookup> {
+  const cats = await Category.find().select("name slug kind isActive i18n").lean<CategoryDoc[]>();
   return new Map(
     cats.map((c) => [
       String(c._id),
-      { ref: { id: String(c._id), name: c.name, slug: c.slug, kind: c.kind as CategoryRef["kind"] }, isActive: c.isActive },
+      {
+        ref: { id: String(c._id), name: pickText(overridesFor(c.i18n, locale).name, c.name), slug: c.slug, kind: c.kind as CategoryRef["kind"] },
+        isActive: c.isActive,
+      },
     ]),
   );
 }
 
-async function toCards(products: ProductDoc[], settings: StoreSettings): Promise<ProductCardDTO[]> {
+async function toCards(products: ProductDoc[], settings: StoreSettings, locale?: Locale): Promise<ProductCardDTO[]> {
   const [media, cats, best] = await Promise.all([
     mediaInfoMap(products.flatMap((p) => p.images.slice(0, 2).map((i) => i.media))),
-    categoryLookup(),
+    categoryLookup(locale),
     getBestsellerIds(),
   ]);
-  return products.map((p) => cardFromDoc(p, settings, media, cats, best));
+  return products.map((p) => cardFromDoc(p, settings, media, cats, best, locale));
 }
 
 function cardFromDoc(
@@ -96,7 +101,10 @@ function cardFromDoc(
   media: Map<string, MediaInfo>,
   cats: CategoryLookup,
   best: Set<string>,
+  locale?: Locale,
 ): ProductCardDTO {
+  const tr = overridesFor(p.i18n, locale);
+  const name = pickText(tr.name, p.name);
   const cat = cats.get(String(p.category));
   const purchasable = isPurchasable(p, cat?.isActive ?? false);
   const badges: ProductBadge[] = [];
@@ -108,13 +116,13 @@ function cardFromDoc(
   return {
     id: String(p._id),
     slug: p.slug,
-    name: p.name,
-    shortDescription: p.shortDescription ?? "",
+    name,
+    shortDescription: pickText(tr.shortDescription, p.shortDescription ?? ""),
     price: p.price,
     compareAtPrice: p.compareAtPrice && p.compareAtPrice > p.price ? p.compareAtPrice : null,
     currency: settings.currency,
-    image: first ? toImage(media.get(String(first.media)), first.alt || p.name) : null,
-    hoverImage: second ? toImage(media.get(String(second.media)), second.alt || p.name) : null,
+    image: first ? toImage(media.get(String(first.media)), pickAt(tr.imageAlts, 0, first.alt) || name) : null,
+    hoverImage: second ? toImage(media.get(String(second.media)), pickAt(tr.imageAlts, 1, second.alt) || name) : null,
     badges,
     purchasable,
     availabilityLabel: purchasable ? (lowStock !== null ? `Only ${lowStock} left` : "Available") : "Currently unavailable",
@@ -155,7 +163,8 @@ function escapeRegex(input: string) {
   return input.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-export async function listShopProducts(query: ShopQuery): Promise<ShopResult> {
+/** Shop listing and search. With a locale, texts are translated and search also matches the translations. */
+export async function listShopProducts(query: ShopQuery, locale?: Locale): Promise<ShopResult> {
   await connectDb();
   const settings = await getSettings();
   const pageSize = Math.min(48, Math.max(1, query.pageSize ?? SHOP_PAGE_SIZE));
@@ -193,7 +202,9 @@ export async function listShopProducts(query: ShopQuery): Promise<ShopResult> {
   const q = query.q?.trim().slice(0, 80);
   if (q) {
     const rx = new RegExp(escapeRegex(q), "i");
-    const searchOr = [{ name: rx }, { shortDescription: rx }, { composition: rx }, { colors: rx }, { description: rx }];
+    const fields = ["name", "shortDescription", "composition", "colors", "description"];
+    const searchOr: Record<string, RegExp>[] = fields.map((field) => ({ [field]: rx }));
+    if (locale && locale !== "en") searchOr.push(...fields.map((field) => ({ [`i18n.${locale}.${field}`]: rx })));
     match.$and = [...((match.$and as unknown[]) ?? []), { $or: searchOr }];
   }
 
@@ -203,13 +214,18 @@ export async function listShopProducts(query: ShopQuery): Promise<ShopResult> {
 
   if (q && sort === "relevance") {
     const starts = new RegExp(`^${escapeRegex(q)}`, "i");
+    const contains = new RegExp(escapeRegex(q), "i");
+    // Rank by the translated name shown to the visitor as well as the English name.
+    const names: unknown[] = locale && locale !== "en" ? [{ $ifNull: [`$i18n.${locale}.name`, ""] }, "$name"] : ["$name"];
     pipeline.push({
       $addFields: {
         _score: {
-          $add: [
-            { $cond: [{ $regexMatch: { input: "$name", regex: starts } }, 4, 0] },
-            { $cond: [{ $regexMatch: { input: "$name", regex: new RegExp(escapeRegex(q), "i") } }, 2, 0] },
-          ],
+          $max: names.map((input) => ({
+            $add: [
+              { $cond: [{ $regexMatch: { input, regex: starts } }, 4, 0] },
+              { $cond: [{ $regexMatch: { input, regex: contains } }, 2, 0] },
+            ],
+          })),
         },
       },
     });
@@ -246,10 +262,10 @@ export async function listShopProducts(query: ShopQuery): Promise<ShopResult> {
   ]);
 
   const counts = await categoryCounts();
-  const toDto = async (c?: CategoryDoc) => (c ? (await categoriesToDto([c], counts))[0] : null);
+  const toDto = async (c?: CategoryDoc) => (c ? (await categoriesToDto([c], counts, locale))[0] : null);
 
   return {
-    items: await toCards(result?.items ?? [], settings),
+    items: await toCards(result?.items ?? [], settings, locale),
     total,
     page,
     pageSize,
@@ -262,7 +278,7 @@ export async function listShopProducts(query: ShopQuery): Promise<ShopResult> {
   };
 }
 
-export async function getFeaturedProducts(limit = 8): Promise<ProductCardDTO[]> {
+export async function getFeaturedProducts(limit = 8, locale?: Locale): Promise<ProductCardDTO[]> {
   await connectDb();
   const settings = await getSettings();
   const activeIds = (await Category.find({ isActive: true }).select("_id").lean()).map((c) => c._id);
@@ -284,42 +300,48 @@ export async function getFeaturedProducts(limit = 8): Promise<ProductCardDTO[]> 
       .lean<ProductDoc[]>();
     docs.push(...more);
   }
-  return toCards(docs, settings);
+  return toCards(docs, settings, locale);
 }
 
-export async function getProductBySlug(slug: string): Promise<ProductDetailDTO | null> {
+export async function getProductBySlug(slug: string, locale?: Locale): Promise<ProductDetailDTO | null> {
   await connectDb();
   const settings = await getSettings();
   const p = await Product.findOne({ slug, ...PUBLIC_FILTER }).lean<ProductDoc>();
   if (!p) return null;
-  const cats = await categoryLookup();
+  const cats = await categoryLookup(locale);
   const cat = cats.get(String(p.category));
   if (!cat?.isActive) return null;
   const [media, best] = await Promise.all([mediaInfoMap(p.images.map((i) => i.media)), getBestsellerIds()]);
-  const card = cardFromDoc(p, settings, media, cats, best);
+  const card = cardFromDoc(p, settings, media, cats, best, locale);
+  const tr = overridesFor(p.i18n, locale);
   return {
     ...card,
-    description: p.description ?? "",
+    description: pickText(tr.description, p.description ?? ""),
     images: p.images
-      .map((i) => toImage(media.get(String(i.media)), i.alt || p.name))
+      .map((i, index) => toImage(media.get(String(i.media)), pickAt(tr.imageAlts, index, i.alt) || card.name))
       .filter((i): i is ImageDTO => i !== null),
-    composition: p.composition ?? [],
-    colors: p.colors ?? [],
-    sizeLabel: p.sizeLabel ?? "",
-    dimensions: p.dimensions ?? "",
-    careInstructions: p.careInstructions ?? "",
+    composition: pickList(tr.composition, p.composition ?? []),
+    colors: pickList(tr.colors, p.colors ?? []),
+    sizeLabel: pickText(tr.sizeLabel, p.sizeLabel ?? ""),
+    dimensions: pickText(tr.dimensions, p.dimensions ?? ""),
+    careInstructions: pickText(tr.careInstructions, p.careInstructions ?? ""),
     allowGiftMessage: p.allowGiftMessage ?? true,
     occasions: (p.occasions ?? [])
       .map((id) => cats.get(String(id)))
       .filter((c): c is { ref: CategoryRef; isActive: boolean } => Boolean(c?.isActive))
       .map((c) => c.ref),
-    seoTitle: p.seoTitle ?? "",
-    seoDescription: p.seoDescription ?? "",
+    seoTitle: pickText(tr.seoTitle, p.seoTitle ?? ""),
+    seoDescription: pickText(tr.seoDescription, p.seoDescription ?? ""),
     updatedAt: new Date(p.updatedAt).toISOString(),
   };
 }
 
-export async function getRelatedProducts(productId: string, categoryId: string | undefined, limit = 4): Promise<ProductCardDTO[]> {
+export async function getRelatedProducts(
+  productId: string,
+  categoryId: string | undefined,
+  limit = 4,
+  locale?: Locale,
+): Promise<ProductCardDTO[]> {
   await connectDb();
   const settings = await getSettings();
   const activeIds = (await Category.find({ isActive: true }).select("_id").lean()).map((c) => c._id);
@@ -335,10 +357,10 @@ export async function getRelatedProducts(productId: string, categoryId: string |
       .lean<ProductDoc[]>();
     docs = [...docs, ...more];
   }
-  return toCards(docs, settings);
+  return toCards(docs, settings, locale);
 }
 
-export async function getProductsByIds(ids: string[]): Promise<ProductCardDTO[]> {
+export async function getProductsByIds(ids: string[], locale?: Locale): Promise<ProductCardDTO[]> {
   const valid = ids.filter((id) => mongoose.isValidObjectId(id));
   if (valid.length === 0) return [];
   await connectDb();
@@ -346,7 +368,7 @@ export async function getProductsByIds(ids: string[]): Promise<ProductCardDTO[]>
   const docs = await Product.find({ _id: { $in: valid }, archivedAt: null, isActive: true }).lean<ProductDoc[]>();
   const order = new Map(valid.map((id, i) => [id, i]));
   docs.sort((a, b) => (order.get(String(a._id)) ?? 0) - (order.get(String(b._id)) ?? 0));
-  return toCards(docs, settings);
+  return toCards(docs, settings, locale);
 }
 
 /* ------------------------------- Categories ------------------------------- */
@@ -361,35 +383,39 @@ async function categoryCounts(): Promise<Map<string, number>> {
   return new Map(rows.map((r) => [String(r._id), r.n]));
 }
 
-async function categoriesToDto(cats: CategoryDoc[], counts?: Map<string, number>): Promise<CategoryDTO[]> {
+async function categoriesToDto(cats: CategoryDoc[], counts?: Map<string, number>, locale?: Locale): Promise<CategoryDTO[]> {
   const media = await mediaInfoMap(cats.map((c) => c.image));
   const n = counts ?? (await categoryCounts());
-  return cats.map((c) => ({
-    id: String(c._id),
-    name: c.name,
-    slug: c.slug,
-    kind: c.kind as CategoryDTO["kind"],
-    description: c.description ?? "",
-    image: c.image ? toImage(media.get(String(c.image)), c.imageAlt || c.name) : null,
-    isFeatured: c.isFeatured,
-    productCount: n.get(String(c._id)) ?? 0,
-    seoTitle: c.seoTitle ?? "",
-    seoDescription: c.seoDescription ?? "",
-    isSample: Boolean(c.isSample),
-  }));
+  return cats.map((c) => {
+    const tr = overridesFor(c.i18n, locale);
+    const name = pickText(tr.name, c.name);
+    return {
+      id: String(c._id),
+      name,
+      slug: c.slug,
+      kind: c.kind as CategoryDTO["kind"],
+      description: pickText(tr.description, c.description ?? ""),
+      image: c.image ? toImage(media.get(String(c.image)), pickText(tr.imageAlt, c.imageAlt ?? "") || name) : null,
+      isFeatured: c.isFeatured,
+      productCount: n.get(String(c._id)) ?? 0,
+      seoTitle: pickText(tr.seoTitle, c.seoTitle ?? ""),
+      seoDescription: pickText(tr.seoDescription, c.seoDescription ?? ""),
+      isSample: Boolean(c.isSample),
+    };
+  });
 }
 
-export async function listPublicCategories(kind?: "collection" | "occasion"): Promise<CategoryDTO[]> {
+export async function listPublicCategories(kind?: "collection" | "occasion", locale?: Locale): Promise<CategoryDTO[]> {
   await connectDb();
   const filter: Record<string, unknown> = { isActive: true };
   if (kind) filter.kind = kind;
   const cats = await Category.find(filter).sort({ sortOrder: 1, name: 1 }).lean<CategoryDoc[]>();
-  return categoriesToDto(cats);
+  return categoriesToDto(cats, undefined, locale);
 }
 
-export async function getPublicCategory(slug: string): Promise<CategoryDTO | null> {
+export async function getPublicCategory(slug: string, locale?: Locale): Promise<CategoryDTO | null> {
   await connectDb();
   const c = await Category.findOne({ slug, isActive: true }).lean<CategoryDoc>();
   if (!c) return null;
-  return (await categoriesToDto([c]))[0];
+  return (await categoriesToDto([c], undefined, locale))[0];
 }

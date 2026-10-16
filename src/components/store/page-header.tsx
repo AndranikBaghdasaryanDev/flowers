@@ -1,12 +1,15 @@
-import Link from "next/link";
+"use client";
+
+import { Link, useT } from "@/i18n/client";
 import { ChevronRight } from "lucide-react";
 import type { ReactNode } from "react";
 
 export type Crumb = { label: string; href?: string };
 
 export function Breadcrumbs({ items }: { items: Crumb[] }) {
+  const t = useT();
   return (
-    <nav aria-label="Breadcrumb">
+    <nav aria-label={t("common.breadcrumb")}>
       <ol className="flex flex-wrap items-center gap-1 text-[13px] text-ink-muted">
         {items.map((c, i) => (
           <li key={i} className="flex items-center gap-1">

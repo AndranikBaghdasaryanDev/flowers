@@ -1,4 +1,4 @@
-import { defineSchema, getModel, ObjectId, type Id } from "./_util";
+import { defineSchema, getModel, i18nField, ObjectId, type I18nOverrides, type Id } from "./_util";
 
 const mediaSchema = defineSchema(
   {
@@ -44,11 +44,14 @@ const categorySchema = defineSchema(
     isFeatured: { type: Boolean, default: false },
     seoTitle: { type: String, maxlength: 120, default: "" },
     seoDescription: { type: String, maxlength: 300, default: "" },
+    i18n: i18nField({ name: 80, description: 1000, imageAlt: 200, seoTitle: 120, seoDescription: 300 }),
     isSample: { type: Boolean, default: false },
   },
   { timestamps: true },
 );
 categorySchema.index({ isActive: 1, kind: 1, sortOrder: 1 });
+
+export type CategoryText = Pick<CategoryDoc, "name" | "description" | "imageAlt" | "seoTitle" | "seoDescription">;
 
 export interface CategoryDoc {
   _id: Id;
@@ -63,6 +66,7 @@ export interface CategoryDoc {
   isFeatured: boolean;
   seoTitle: string;
   seoDescription: string;
+  i18n?: I18nOverrides<CategoryText>;
   isSample: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -104,6 +108,19 @@ const productSchema = defineSchema(
     seoDescription: { type: String, maxlength: 300, default: "" },
     unitsSold: { type: Number, default: 0 },
     archivedAt: { type: Date, default: null, index: true },
+    i18n: i18nField({
+      name: 120,
+      shortDescription: 240,
+      description: 5000,
+      careInstructions: 2000,
+      sizeLabel: 60,
+      dimensions: 80,
+      seoTitle: 120,
+      seoDescription: 300,
+      composition: [60],
+      colors: [40],
+      imageAlts: [300],
+    }),
     isSample: { type: Boolean, default: false },
   },
   { timestamps: true },
@@ -111,6 +128,12 @@ const productSchema = defineSchema(
 productSchema.index({ archivedAt: 1, isActive: 1, createdAt: -1 });
 productSchema.index({ price: 1 });
 productSchema.index({ unitsSold: -1 });
+
+/** Translatable product text. `imageAlts` is aligned with `images` by position. */
+export type ProductText = Pick<
+  ProductDoc,
+  "name" | "shortDescription" | "description" | "careInstructions" | "sizeLabel" | "dimensions" | "seoTitle" | "seoDescription" | "composition" | "colors"
+> & { imageAlts: string[] };
 
 export interface ProductDoc {
   _id: Id;
@@ -139,6 +162,7 @@ export interface ProductDoc {
   seoDescription: string;
   unitsSold: number;
   archivedAt: Date | null;
+  i18n?: I18nOverrides<ProductText>;
   isSample: boolean;
   createdAt: Date;
   updatedAt: Date;

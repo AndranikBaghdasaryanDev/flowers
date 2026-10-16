@@ -34,10 +34,10 @@ export function toMajor(minor: number, currency: CurrencyCode): number {
   return minor / 10 ** currencyDecimals(currency);
 }
 
-export function formatMoney(minor: number, currency: CurrencyCode): string {
+export function formatMoney(minor: number, currency: CurrencyCode, intlTag = "en-US"): string {
   const def = CURRENCIES[currency];
   const major = toMajor(minor, currency);
-  const number = new Intl.NumberFormat("en-US", {
+  const number = new Intl.NumberFormat(intlTag, {
     minimumFractionDigits: def.decimals,
     maximumFractionDigits: def.decimals,
   }).format(major);

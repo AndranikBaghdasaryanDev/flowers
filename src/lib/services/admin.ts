@@ -2,13 +2,16 @@ import "server-only";
 import mongoose from "mongoose";
 import { z } from "zod";
 import { connectDb } from "@/lib/db";
-import { Courier, DeliveryMethod, type DeliveryMethodDoc } from "@/lib/models/delivery";
+import { Courier, DeliveryMethod, type DeliveryMethodDoc, type DeliveryMethodText } from "@/lib/models/delivery";
+import type { I18nOverrides } from "@/lib/models/_util";
+import { i18nSetPaths, overridesFor, pickText } from "@/lib/localize";
+import type { Locale } from "@/i18n/config";
 import { GalleryItem, NewsletterSubscriber, Review, Settings } from "@/lib/models/content";
 import { AuditLog } from "@/lib/models/system";
 import { Order, type OrderDoc } from "@/lib/models/order";
 import { Category, Product } from "@/lib/models/catalog";
 import { User } from "@/lib/models/user";
-import { ApiError } from "@/lib/api/errors";
+import { ApiError, msg } from "@/lib/api/errors";
 import type { SessionUser } from "@/lib/auth/session";
 import { destroyAllSessions } from "@/lib/auth/session";
 import { hashPassword } from "@/lib/auth/password";
@@ -37,7 +40,13 @@ const rx = (q: string) => new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "
 
 /* ----------------------------- Delivery methods ---------------------------- */
 
-export type AdminDeliveryMethod = DeliveryMethodDTO & { isActive: boolean; sortOrder: number; orderCount: number };
+export type AdminDeliveryMethod = DeliveryMethodDTO & {
+  isActive: boolean;
+  sortOrder: number;
+  orderCount: number;
+  /** Stored Armenian / Russian overrides (English is in the base fields). */
+  i18n: I18nOverrides<DeliveryMethodText>;
+};
 
 /** Methods with money converted to MAJOR units for the edit form. */
 export async function listAdminDeliveryMethods(): Promise<AdminDeliveryMethod[]> {
@@ -60,6 +69,7 @@ export async function listAdminDeliveryMethods(): Promise<AdminDeliveryMethod[]>
       isActive: d.isActive,
       sortOrder: d.sortOrder ?? 0,
       orderCount: n.get(String(d._id)) ?? 0,
+      i18n: d.i18n ?? {},
     };
   });
 }
@@ -71,7 +81,7 @@ export async function saveDeliveryMethod(input: z.infer<typeof deliveryMethodInp
   const seen = new Set<string>();
   for (const z of input.zones) {
     const key = z.name.toLowerCase();
-    if (seen.has(key)) throw ApiError.validation(`The area “${z.name}” is listed twice.`);
+    if (seen.has(key)) throw ApiError.validation(msg("server.errors.zoneDuplicate", { name: z.name }));
     seen.add(key);
   }
   const payload = {
@@ -84,7 +94,7 @@ export async function saveDeliveryMethod(input: z.infer<typeof deliveryMethodInp
   };
   if (id) {
     const res = await DeliveryMethod.updateOne({ _id: id }, { $set: payload });
-    if (res.matchedCount === 0) throw ApiError.notFound("Delivery method not found.");
+    if (res.matchedCount === 0) throw ApiError.notFound("server.notFound.deliveryMethod");
   } else {
     const doc = await DeliveryMethod.create(payload);
     id = String(doc._id);
@@ -96,7 +106,7 @@ export async function saveDeliveryMethod(input: z.infer<typeof deliveryMethodInp
 export async function deleteDeliveryMethod(id: string, user: SessionUser) {
   await connectDb();
   const doc = await DeliveryMethod.findById(id).lean();
-  if (!doc) throw ApiError.notFound("Delivery method not found.");
+  if (!doc) throw ApiError.notFound("server.notFound.deliveryMethod");
   const used = await Order.exists({ "fulfillment.method": id });
   if (used) {
     // Orders keep a snapshot of the method name; the method is deactivated instead of removed.
@@ -149,7 +159,7 @@ export async function saveCourier(input: z.infer<typeof courierInputSchema>, use
   const payload = { ...input, vehicleRegistration: input.vehicleRegistration.toUpperCase() };
   if (id) {
     const res = await Courier.updateOne({ _id: id }, { $set: payload });
-    if (res.matchedCount === 0) throw ApiError.notFound("Courier not found.");
+    if (res.matchedCount === 0) throw ApiError.notFound("server.notFound.courier");
   } else {
     id = String((await Courier.create(payload))._id);
   }
@@ -243,7 +253,7 @@ export async function getCustomer(id: string) {
 export async function setCustomerStatus(id: string, status: "active" | "disabled", actor: SessionUser) {
   await connectDb();
   const user = await User.findById(id).select("role name").lean();
-  if (!user || user.role !== "customer") throw ApiError.notFound("Customer not found.");
+  if (!user || user.role !== "customer") throw ApiError.notFound("server.notFound.customer");
   await User.updateOne({ _id: id }, { $set: { status } });
   if (status === "disabled") await destroyAllSessions(id);
   await audit({ actor, action: "customer.status", entityType: "user", entityId: id, summary: `${status === "disabled" ? "Disabled" : "Enabled"} customer ${user.name}` });
@@ -275,7 +285,7 @@ export async function addStaff(input: { email: string; name: string; role: Staff
   let temporaryPassword: string | null = null;
   let id: string;
   if (existing) {
-    if (isStaffRole(existing.role)) throw ApiError.conflict("This person is already a staff member.");
+    if (isStaffRole(existing.role)) throw ApiError.conflict("server.errors.alreadyStaff");
     await User.updateOne({ _id: existing._id }, { $set: { role: input.role } });
     id = String(existing._id);
   } else {
@@ -289,13 +299,13 @@ export async function addStaff(input: { email: string; name: string; role: Staff
 
 export async function updateStaff(id: string, role: Role, status: "active" | "disabled" | undefined, actor: SessionUser) {
   await connectDb();
-  if (id === actor.id) throw ApiError.forbidden("You cannot change your own role or status.");
+  if (id === actor.id) throw ApiError.forbidden("server.errors.ownRole");
   const target = await User.findById(id).select("role name").lean();
-  if (!target || !isStaffRole(target.role)) throw ApiError.notFound("Staff member not found.");
+  if (!target || !isStaffRole(target.role)) throw ApiError.notFound("server.notFound.staffMember");
   if ((target.role === "owner" || role === "owner") && actor.role !== "owner") throw ApiError.forbidden();
   if (target.role === "owner" && (role !== "owner" || status === "disabled")) {
     const owners = await User.countDocuments({ role: "owner", status: "active" });
-    if (owners <= 1) throw ApiError.conflict("There must always be at least one active owner.");
+    if (owners <= 1) throw ApiError.conflict("server.errors.lastOwner");
   }
   const set: Record<string, unknown> = { role };
   if (status) set.status = status;
@@ -339,7 +349,7 @@ export async function listReviewsAdmin(status: string | undefined, page = 1) {
 export async function moderateReview(id: string, status: "approved" | "rejected" | "pending", actor: SessionUser) {
   await connectDb();
   const res = await Review.updateOne({ _id: id }, { $set: { status, moderatedBy: actor.id, moderatedAt: new Date() } });
-  if (res.matchedCount === 0) throw ApiError.notFound("Review not found.");
+  if (res.matchedCount === 0) throw ApiError.notFound("server.notFound.review");
   await audit({ actor, action: "review.moderate", entityType: "review", entityId: id, summary: `Review ${status}` });
 }
 
@@ -347,15 +357,18 @@ export async function moderateReview(id: string, status: "approved" | "rejected"
 
 export async function updateStoreSettings(input: z.infer<typeof settingsInputSchema>, actor: SessionUser) {
   await connectDb();
-  if (!isValidTimeZone(input.timeZone)) throw ApiError.validation("Unknown time zone.", { timeZone: "Unknown time zone." });
-  await Settings.updateOne({ _id: "store" }, { $set: input }, { upsert: true });
+  if (!isValidTimeZone(input.timeZone)) throw ApiError.validation("server.errors.unknownTimeZone", { timeZone: "server.errors.unknownTimeZone" });
+  const { i18n, ...base } = input;
+  // Translations are set field by field so content and legal translations are left untouched.
+  await Settings.updateOne({ _id: "store" }, { $set: { ...base, ...i18nSetPaths(i18n) } }, { upsert: true });
   await audit({ actor, action: "settings.update", entityType: "settings", entityId: "store", summary: "Updated store settings" });
 }
 
 export async function updateContent(input: z.infer<typeof contentInputSchema>, actor: SessionUser) {
   await connectDb();
   const before = await Settings.findById("store").select("content").lean();
-  const set = Object.fromEntries(Object.entries(input).map(([k, v]) => [`content.${k}`, v]));
+  const { i18n, ...base } = input;
+  const set = { ...Object.fromEntries(Object.entries(base).map(([k, v]) => [`content.${k}`, v])), ...i18nSetPaths(i18n) };
   await Settings.updateOne({ _id: "store" }, { $set: set }, { upsert: true });
   await audit({ actor, action: "content.update", entityType: "settings", entityId: "store", summary: "Updated homepage content" });
   const old = [before?.content?.heroImage, before?.content?.storyImage].filter(Boolean).map(String);
@@ -364,30 +377,51 @@ export async function updateContent(input: z.infer<typeof contentInputSchema>, a
 
 export async function updateLegal(input: z.infer<typeof legalInputSchema>, actor: SessionUser) {
   await connectDb();
-  const set: Record<string, unknown> = { "legal.privacy": input.privacy, "legal.terms": input.terms, "legal.returns": input.returns };
+  const set: Record<string, unknown> = {
+    "legal.privacy": input.privacy,
+    "legal.terms": input.terms,
+    "legal.returns": input.returns,
+    ...i18nSetPaths(input.i18n),
+  };
   if (input.markReviewed) set["legal.reviewedAt"] = new Date();
   await Settings.updateOne({ _id: "store" }, { $set: set }, { upsert: true });
   await audit({ actor, action: "legal.update", entityType: "settings", entityId: "store", summary: "Updated legal pages" });
 }
 
-export type GalleryItemDTO = { id: string; image: ImageDTO | null; imageId: string; alt: string; caption: string; link: string; sortOrder: number; isActive: boolean; isSample: boolean };
+export type GalleryItemDTO = {
+  id: string;
+  image: ImageDTO | null;
+  imageId: string;
+  alt: string;
+  caption: string;
+  link: string;
+  sortOrder: number;
+  isActive: boolean;
+  isSample: boolean;
+  /** Stored overrides; only present when listed without a locale (admin). */
+  i18n?: I18nOverrides<{ alt: string; caption: string }>;
+};
 
-export async function listGallery(activeOnly: boolean): Promise<GalleryItemDTO[]> {
+/** With a locale, alt text and captions are translated (falling back to English); without, raw values for editing. */
+export async function listGallery(activeOnly: boolean, locale?: Locale): Promise<GalleryItemDTO[]> {
   await connectDb();
   const docs = await GalleryItem.find(activeOnly ? { isActive: true } : {}).sort({ sortOrder: 1, createdAt: -1 }).limit(activeOnly ? 12 : 100).lean();
   const media = await mediaInfoMap(docs.map((d) => d.image));
   return docs.map((d) => {
     const info = media.get(String(d.image));
+    const tr = overridesFor(d.i18n, locale);
+    const alt = pickText(tr.alt, d.alt);
     return {
       id: String(d._id),
-      image: info ? { src: info.url, alt: d.alt, width: info.width, height: info.height } : null,
+      image: info ? { src: info.url, alt, width: info.width, height: info.height } : null,
       imageId: String(d.image),
-      alt: d.alt,
-      caption: d.caption ?? "",
+      alt,
+      caption: pickText(tr.caption, d.caption ?? ""),
       link: d.link ?? "",
       sortOrder: d.sortOrder ?? 0,
       isActive: d.isActive,
       isSample: Boolean(d.isSample),
+      ...(locale ? {} : { i18n: d.i18n ?? {} }),
     };
   });
 }
@@ -396,7 +430,7 @@ export async function saveGalleryItem(input: z.infer<typeof galleryInputSchema>,
   await connectDb();
   if (id) {
     const before = await GalleryItem.findById(id).lean();
-    if (!before) throw ApiError.notFound("Gallery item not found.");
+    if (!before) throw ApiError.notFound("server.notFound.galleryItem");
     await GalleryItem.updateOne({ _id: id }, { $set: { ...input, isSample: false } });
     if (String(before.image) !== input.image) await cleanupOrphanMedia([String(before.image)]);
   } else {
@@ -408,7 +442,7 @@ export async function saveGalleryItem(input: z.infer<typeof galleryInputSchema>,
 export async function deleteGalleryItem(id: string, actor: SessionUser) {
   await connectDb();
   const item = await GalleryItem.findByIdAndDelete(id).lean();
-  if (!item) throw ApiError.notFound("Gallery item not found.");
+  if (!item) throw ApiError.notFound("server.notFound.galleryItem");
   await cleanupOrphanMedia([String(item.image)]);
   await audit({ actor, action: "gallery.delete", entityType: "gallery", entityId: id, summary: "Deleted gallery image" });
 }

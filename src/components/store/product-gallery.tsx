@@ -6,10 +6,12 @@ import { Expand } from "lucide-react";
 import { Modal } from "@/components/ui/modal";
 import { ImageFallback } from "@/components/store/image-fallback";
 import { cn } from "@/lib/cn";
+import { useT } from "@/i18n/client";
 import type { ImageDTO } from "@/lib/types";
 
 /** Product image gallery: thumbnails, swipe on touch, hover zoom on desktop, full-screen lightbox. */
 export function ProductGallery({ images, name }: { images: ImageDTO[]; name: string }) {
+  const t = useT();
   const [active, setActive] = useState(0);
   const [zoom, setZoom] = useState<{ x: number; y: number } | null>(null);
   const [lightbox, setLightbox] = useState(false);
@@ -33,13 +35,13 @@ export function ProductGallery({ images, name }: { images: ImageDTO[]; name: str
   return (
     <div className="flex flex-col-reverse gap-4 lg:flex-row">
       {images.length > 1 && (
-        <ul className="flex gap-3 lg:w-20 lg:flex-col" aria-label="Product images">
+        <ul className="flex gap-3 lg:w-20 lg:flex-col" aria-label={t("product.images")}>
           {images.map((img, i) => (
             <li key={img.src}>
               <button
                 type="button"
                 onClick={() => goTo(i)}
-                aria-label={`Show image ${i + 1} of ${images.length}`}
+                aria-label={t("product.showImageOf", { n: i + 1, total: images.length })}
                 aria-current={i === active}
                 className={cn(
                   "relative block h-20 w-16 overflow-hidden rounded-xl bg-cream ring-offset-2 ring-offset-ivory transition-all lg:h-24 lg:w-20",
@@ -97,7 +99,7 @@ export function ProductGallery({ images, name }: { images: ImageDTO[]; name: str
           type="button"
           onClick={() => setLightbox(true)}
           className="absolute bottom-4 right-4 inline-flex h-11 w-11 items-center justify-center rounded-full bg-ivory/90 text-ink shadow-sm backdrop-blur hover:text-brand"
-          aria-label="View full-size image"
+          aria-label={t("product.viewFullSize")}
         >
           <Expand className="h-[18px] w-[18px]" />
         </button>
@@ -122,7 +124,7 @@ export function ProductGallery({ images, name }: { images: ImageDTO[]; name: str
                 type="button"
                 onClick={() => setActive(i)}
                 className={cn("relative h-16 w-12 overflow-hidden rounded-lg", i === active ? "ring-2 ring-brand" : "opacity-60")}
-                aria-label={`Show image ${i + 1}`}
+                aria-label={t("product.showImage", { n: i + 1 })}
               >
                 <Image src={img.src} alt="" fill sizes="48px" className="object-cover" />
               </button>

@@ -69,11 +69,11 @@ async function storeAddresses(userId: string, addresses: AddressFields[]): Promi
 export async function saveAddress(userId: string, input: AddressInput, addressId?: string): Promise<AddressDTO[]> {
   await connectDb();
   const addresses = await loadAddresses(userId);
-  if (!addressId && addresses.length >= 10) throw ApiError.validation("You can save up to 10 addresses.");
+  if (!addressId && addresses.length >= 10) throw ApiError.validation("server.errors.addressLimit");
   const makeDefault = input.isDefault || addresses.length === 0 || (addresses.length === 1 && Boolean(addressId));
   let next: AddressFields[];
   if (addressId) {
-    if (!addresses.some((a) => String(a._id) === addressId)) throw ApiError.notFound("Address not found.");
+    if (!addresses.some((a) => String(a._id) === addressId)) throw ApiError.notFound("server.notFound.address");
     next = addresses.map((a) => (String(a._id) === addressId ? { ...a, ...input, _id: a._id } : a));
   } else {
     next = [...addresses, { ...input, _id: new mongoose.Types.ObjectId() }];
@@ -88,7 +88,7 @@ export async function deleteAddress(userId: string, addressId: string): Promise<
   await connectDb();
   const addresses = await loadAddresses(userId);
   const existing = addresses.find((a) => String(a._id) === addressId);
-  if (!existing) throw ApiError.notFound("Address not found.");
+  if (!existing) throw ApiError.notFound("server.notFound.address");
   const next = addresses.filter((a) => String(a._id) !== addressId);
   if (existing.isDefault && next[0]) next[0] = { ...next[0], isDefault: true };
   return storeAddresses(userId, next);
@@ -104,10 +104,10 @@ export async function getFavoriteIds(userId: string): Promise<string[]> {
 
 export async function setFavorite(userId: string, productId: string, favorite: boolean): Promise<string[]> {
   await connectDb();
-  if (!mongoose.isValidObjectId(productId)) throw ApiError.notFound("Product not found.");
+  if (!mongoose.isValidObjectId(productId)) throw ApiError.notFound("server.notFound.product");
   if (favorite) {
     const exists = await Product.exists({ _id: productId, archivedAt: null });
-    if (!exists) throw ApiError.notFound("Product not found.");
+    if (!exists) throw ApiError.notFound("server.notFound.product");
     await User.updateOne({ _id: userId }, { $addToSet: { favorites: productId } });
   } else {
     await User.updateOne({ _id: userId }, { $pull: { favorites: productId } });

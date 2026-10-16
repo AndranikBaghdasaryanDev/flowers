@@ -7,14 +7,14 @@ export const GET = route<{ id: string }>(async (_req, ctx) => {
   await requirePermission("products:manage");
   const { id } = await ctx.params;
   const product = await getAdminProduct(id);
-  if (!product) throw ApiError.notFound("Product not found.");
+  if (!product) throw ApiError.notFound("server.notFound.product");
   return ok(product);
 });
 
 export const PUT = route<{ id: string }>(async (req, ctx) => {
   const user = await requirePermission("products:manage");
   const { id } = await ctx.params;
-  assertObjectId(id, "Product");
+  assertObjectId(id, "product");
   const input = await readJson(req, productInputSchema);
   await updateProduct(id, input, user);
   return ok({ id });
@@ -24,7 +24,7 @@ export const PUT = route<{ id: string }>(async (req, ctx) => {
 export const PATCH = route<{ id: string }>(async (req, ctx) => {
   const user = await requirePermission("products:manage");
   const { id } = await ctx.params;
-  assertObjectId(id, "Product");
+  assertObjectId(id, "product");
   await patchProduct(id, await readJson(req, productPatchSchema), user);
   return ok({ id });
 });
@@ -33,6 +33,6 @@ export const PATCH = route<{ id: string }>(async (req, ctx) => {
 export const DELETE = route<{ id: string }>(async (_req, ctx) => {
   const user = await requirePermission("products:manage");
   const { id } = await ctx.params;
-  assertObjectId(id, "Product");
+  assertObjectId(id, "product");
   return ok({ result: await deleteProduct(id, user) });
 });

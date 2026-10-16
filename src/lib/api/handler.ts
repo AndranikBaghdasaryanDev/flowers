@@ -4,11 +4,23 @@ import { ZodError, type ZodType } from "zod";
 import mongoose from "mongoose";
 import { connectDb, DatabaseUnavailableError } from "@/lib/db";
 import { env } from "@/lib/env";
-import { ApiError, type FieldErrors } from "@/lib/api/errors";
+import {
+  ApiError,
+  isDuplicateKeyError,
+  notFound,
+  renderText,
+  type FieldErrors,
+  type NotFoundEntity,
+  type TextTranslator,
+} from "@/lib/api/errors";
 import { getSessionUser, type SessionUser } from "@/lib/auth/session";
 import type { Permission } from "@/lib/domain/roles";
 import { hasPermission } from "@/lib/domain/roles";
 import { logger } from "@/lib/logger";
+import { DEFAULT_LOCALE } from "@/i18n/config";
+import { getRequestLocale, translatorFor } from "@/i18n/server";
+
+export { isDuplicateKeyError };
 
 const MUTATING = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 const MAX_JSON_BYTES = 1024 * 1024;
@@ -17,62 +29,87 @@ export function ok<T>(data: T, init?: ResponseInit) {
   return NextResponse.json({ data }, init);
 }
 
-export function zodFieldErrors(error: ZodError): FieldErrors {
+/** Translator for the language of the current API request (X-Locale header, cookie, Accept-Language). */
+export async function requestTranslator() {
+  let locale = DEFAULT_LOCALE;
+  try {
+    locale = await getRequestLocale();
+  } catch {
+    // Outside a request scope: fall back to the default language.
+  }
+  return translatorFor(locale);
+}
+
+/**
+ * Translates a Zod issue. Schema messages are dictionary keys (`server.validation.*`);
+ * Zod's built-in English messages are replaced by a generic message for the issue type.
+ */
+function zodIssueText(t: TextTranslator, issue: ZodError["issues"][number]): string {
+  const vars: Record<string, string | number> = {};
+  if ("maximum" in issue) vars.max = Number(issue.maximum);
+  if ("minimum" in issue) vars.min = Number(issue.minimum);
+  if (issue.message.startsWith("server.")) return renderText(t, { key: issue.message, vars });
+  const origin = "origin" in issue ? issue.origin : undefined;
+  let key = "server.validation.invalid";
+  if (issue.code === "too_big") key = origin === "string" ? "server.validation.tooLong" : origin === "array" ? "server.validation.tooMany" : "server.validation.tooBig";
+  else if (issue.code === "too_small") key = origin === "string" ? "server.validation.tooShort" : origin === "array" ? "server.validation.tooFew" : "server.validation.tooSmall";
+  else if (issue.code === "invalid_type" && issue.input === undefined) key = "server.validation.required";
+  else if (issue.code === "invalid_value") key = "server.validation.chooseOption";
+  else if (issue.code === "invalid_format") key = "server.validation.invalidFormat";
+  return renderText(t, { key, vars });
+}
+
+export function zodFieldErrors(error: ZodError, t: TextTranslator): FieldErrors {
   const fields: FieldErrors = {};
   for (const issue of error.issues) {
     const key = issue.path.join(".") || "_";
-    if (!fields[key]) fields[key] = issue.message;
+    if (!fields[key]) fields[key] = zodIssueText(t, issue);
   }
   return fields;
 }
 
-function errorResponse(error: unknown, req: NextRequest): NextResponse {
+function errorBody(code: string, message: string, extra?: { fields?: FieldErrors; meta?: Record<string, unknown> }) {
+  return { error: { code, message, ...extra } };
+}
+
+async function errorResponse(error: unknown, req: NextRequest): Promise<NextResponse> {
+  const t = await requestTranslator();
   if (error instanceof ApiError) {
     const headers: Record<string, string> = {};
     if (error.code === "rate_limited" && typeof error.meta?.retryAfter === "number") {
       headers["Retry-After"] = String(error.meta.retryAfter);
     }
-    return NextResponse.json(
-      { error: { code: error.code, message: error.message, fields: error.fields, meta: error.meta } },
-      { status: error.status, headers },
-    );
+    const fields = error.fields
+      ? Object.fromEntries(Object.entries(error.fields).map(([k, v]) => [k, renderText(t, v)]))
+      : undefined;
+    return NextResponse.json(errorBody(error.code, renderText(t, error.text), { fields, meta: error.meta }), {
+      status: error.status,
+      headers,
+    });
   }
   if (error instanceof ZodError) {
     return NextResponse.json(
-      { error: { code: "validation_error", message: "Please check the highlighted fields.", fields: zodFieldErrors(error) } },
+      errorBody("validation_error", t("server.errors.checkFields"), { fields: zodFieldErrors(error, t) }),
       { status: 422 },
     );
   }
   if (error instanceof DatabaseUnavailableError || error instanceof mongoose.Error.MongooseServerSelectionError) {
     logger.error("database unavailable", { path: req.nextUrl.pathname, error });
-    return NextResponse.json(
-      { error: { code: "service_unavailable", message: "The service is temporarily unavailable. Please try again shortly." } },
-      { status: 503 },
-    );
+    return NextResponse.json(errorBody("service_unavailable", t("server.errors.unavailable")), { status: 503 });
   }
   if (isDuplicateKeyError(error)) {
-    return NextResponse.json(
-      { error: { code: "conflict", message: "A record with the same unique value already exists." } },
-      { status: 409 },
-    );
+    return NextResponse.json(errorBody("conflict", t("server.errors.duplicate")), { status: 409 });
   }
   if (error instanceof mongoose.Error.ValidationError) {
     const fields: FieldErrors = {};
-    for (const [key, value] of Object.entries(error.errors)) fields[key] = value.message;
-    return NextResponse.json({ error: { code: "validation_error", message: "Invalid data.", fields } }, { status: 422 });
+    for (const key of Object.keys(error.errors)) fields[key] = t("server.validation.invalid");
+    return NextResponse.json(errorBody("validation_error", t("server.errors.invalidData"), { fields }), { status: 422 });
   }
   if (error instanceof mongoose.Error.CastError) {
-    return NextResponse.json({ error: { code: "not_found", message: "Not found." } }, { status: 404 });
+    return NextResponse.json(errorBody("not_found", t("server.errors.notFound")), { status: 404 });
   }
   logger.error("unhandled API error", { path: req.nextUrl.pathname, method: req.method, error });
-  return NextResponse.json(
-    { error: { code: "internal_error", message: "Something went wrong on our side. Please try again." } },
-    { status: 500 },
-  );
-}
-
-export function isDuplicateKeyError(error: unknown): error is { code: number; keyPattern?: Record<string, unknown> } {
-  return typeof error === "object" && error !== null && (error as { code?: number }).code === 11000;
+  return NextResponse.json(errorBody("internal_error", t("server.errors.internal")), { status: 500 });
 }
 
 /**
@@ -87,14 +124,14 @@ function assertSameOrigin(req: NextRequest) {
     try {
       originHost = new URL(origin).host;
     } catch {
-      throw ApiError.forbidden("Cross-site request rejected.");
+      throw ApiError.forbidden("server.errors.crossSite");
     }
     const allowed = new Set([req.nextUrl.host, req.headers.get("host") ?? "", safeHost(env.appUrl)]);
     const forwardedHost = req.headers.get("x-forwarded-host");
     if (forwardedHost) allowed.add(forwardedHost);
-    if (!allowed.has(originHost)) throw ApiError.forbidden("Cross-site request rejected.");
+    if (!allowed.has(originHost)) throw ApiError.forbidden("server.errors.crossSite");
   } else if (fetchSite && fetchSite !== "same-origin" && fetchSite !== "none") {
-    throw ApiError.forbidden("Cross-site request rejected.");
+    throw ApiError.forbidden("server.errors.crossSite");
   }
 }
 
@@ -128,15 +165,15 @@ export function route<P = Record<string, string>>(
 
 export async function readJson<T>(req: NextRequest, schema: ZodType<T>): Promise<T> {
   const length = Number(req.headers.get("content-length") ?? 0);
-  if (length > MAX_JSON_BYTES) throw new ApiError(413, "payload_too_large", "Request body is too large.");
+  if (length > MAX_JSON_BYTES) throw new ApiError(413, "payload_too_large", "server.errors.payloadTooLarge");
   let body: unknown;
   try {
     const text = await req.text();
-    if (text.length > MAX_JSON_BYTES) throw new ApiError(413, "payload_too_large", "Request body is too large.");
+    if (text.length > MAX_JSON_BYTES) throw new ApiError(413, "payload_too_large", "server.errors.payloadTooLarge");
     body = text ? JSON.parse(text) : {};
   } catch (error) {
     if (error instanceof ApiError) throw error;
-    throw ApiError.badRequest("Malformed JSON body.");
+    throw ApiError.badRequest("server.errors.malformedJson");
   }
   return schema.parse(body);
 }
@@ -167,6 +204,6 @@ export async function requireAnyPermission(permissions: Permission[]): Promise<S
   return user;
 }
 
-export function assertObjectId(id: string, label = "Resource"): void {
-  if (!mongoose.isValidObjectId(id) || !/^[a-f\d]{24}$/i.test(id)) throw ApiError.notFound(`${label} not found.`);
+export function assertObjectId(id: string, entity?: NotFoundEntity): void {
+  if (!mongoose.isValidObjectId(id) || !/^[a-f\d]{24}$/i.test(id)) throw entity ? notFound(entity) : ApiError.notFound();
 }
